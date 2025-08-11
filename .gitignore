@@ -39,3 +39,34 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OS
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Backup files
+*.backup
+*.bak
+
+# Database
+*.sqlite
+*.sqlite3
+
+# Temporary files
+.tmp/
+temp/
