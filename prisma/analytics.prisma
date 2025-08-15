@@ -1,0 +1,70 @@
+// prisma/analytics.prisma
+// NOTE: This content should be added to the main schema.prisma file
+// Keeping separate for modular organization during development
+
+// Profile view tracking
+model ProfileView {
+  id          String   @id @default(cuid())
+  userId      String
+  visitorId   String?  // Anonymous visitor identifier
+  ipAddress   String?
+  userAgent   String?
+  referer     String?
+  country     String?
+  city        String?
+  device      String?  // "desktop", "mobile", "tablet"
+  browser     String?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("profile_views")
+}
+
+// Project click tracking
+model ProjectClick {
+  id          String   @id @default(cuid())
+  projectId   String
+  clickType   String   // "demo", "repo", "cta", "image"
+  visitorId   String?
+  ipAddress   String?
+  userAgent   String?
+  referer     String?
+  country     String?
+  device      String?
+  createdAt   DateTime @default(now())
+  
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("project_clicks")
+}
+
+// Daily analytics aggregation for performance
+model DailyAnalytics {
+  id           String   @id @default(cuid())
+  date         DateTime @unique @db.Date
+  totalViews   Int      @default(0)
+  totalClicks  Int      @default(0)
+  uniqueVisitors Int    @default(0)
+  newSignups   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("daily_analytics")
+}
+
+// User analytics summary (cached for performance)
+model UserAnalytics {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  totalProfileViews Int      @default(0)
+  totalProjectClicks Int     @default(0)
+  totalEmailCaptures Int     @default(0)
+  lastViewAt        DateTime?
+  lastClickAt       DateTime?
+  topReferer        String?
+  topCountry        String?
+  updatedAt         DateTime @updatedAt
+  
+  @@map("user_analytics")
+}

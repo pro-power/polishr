@@ -3,7 +3,7 @@
 const nextConfig = {
     // Enable experimental features for production optimization
     experimental: {
-      serverComponentsExternalPackages: ['bcryptjs'],
+      // Remove serverExternalPackages - not needed in Next.js 15
     },
     
     // Image optimization configuration

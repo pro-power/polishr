@@ -1,0 +1,225 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and profile
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  emailVerified     DateTime?
+  emailVerificationToken String?
+  passwordHash      String
+  username          String?  @unique
+  displayName       String?
+  bio               String?
+  avatarUrl         String?
+  website           String?
+  twitterUrl        String?
+  githubUrl         String?
+  linkedinUrl       String?
+  
+  // Profile customization
+  themeColor        String   @default("blue")
+  isPublic          Boolean  @default(true)
+  customDomain      String?  @unique
+  
+  // Subscription info
+  planType          PlanType @default(FREE)
+  stripeCustomerId  String?
+  subscriptionId    String?
+  subscriptionStatus String?
+  planExpiresAt     DateTime?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastLoginAt       DateTime?
+  
+  // Relations
+  projects          Project[]
+  profileViews      ProfileView[]
+  emailCaptures     EmailCapture[]
+  resetTokens       PasswordResetToken[]
+  
+  @@map("users")
+}
+
+// Project model for showcased work
+model Project {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  demoUrl     String?
+  repoUrl     String?
+  imageUrl    String?
+  techStack   String[] // Array of technology names
+  category    String?  // "web", "mobile", "ai", "tool", etc.
+  
+  // Call-to-action configuration
+  ctaType     CTAType  @default(DEMO)
+  ctaUrl      String?
+  ctaText     String?
+  
+  // Project metadata
+  status      ProjectStatus @default(LIVE)
+  featured    Boolean  @default(false)
+  position    Int      @default(0) // For ordering
+  isPublic    Boolean  @default(true)
+  
+  // Analytics
+  clickCount  Int      @default(0)
+  viewCount   Int      @default(0)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images      ProjectImage[]
+  clicks      ProjectClick[]
+  emailCaptures EmailCapture[]
+  
+  @@map("projects")
+}
+
+// Additional project images
+model ProjectImage {
+  id        String   @id @default(cuid())
+  projectId String
+  url       String
+  altText   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("project_images")
+}
+
+// Email captures for project waitlists/newsletters
+model EmailCapture {
+  id        String   @id @default(cuid())
+  email     String
+  projectId String?
+  userId    String?
+  source    String?  // "project", "profile", "newsletter"
+  metadata  Json?    // Additional data
+  createdAt DateTime @default(now())
+  
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("email_captures")
+}
+
+// Password reset tokens
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("password_reset_tokens")
+}
+
+// Profile view tracking
+model ProfileView {
+  id          String   @id @default(cuid())
+  userId      String
+  visitorId   String?  // Anonymous visitor identifier
+  ipAddress   String?
+  userAgent   String?
+  referer     String?
+  country     String?
+  city        String?
+  device      String?  // "desktop", "mobile", "tablet"
+  browser     String?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("profile_views")
+}
+
+// Project click tracking
+model ProjectClick {
+  id          String   @id @default(cuid())
+  projectId   String
+  clickType   String   // "demo", "repo", "cta", "image"
+  visitorId   String?
+  ipAddress   String?
+  userAgent   String?
+  referer     String?
+  country     String?
+  device      String?
+  createdAt   DateTime @default(now())
+  
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("project_clicks")
+}
+
+// Daily analytics aggregation for performance
+model DailyAnalytics {
+  id           String   @id @default(cuid())
+  date         DateTime @unique @db.Date
+  totalViews   Int      @default(0)
+  totalClicks  Int      @default(0)
+  uniqueVisitors Int    @default(0)
+  newSignups   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("daily_analytics")
+}
+
+// User analytics summary (cached for performance)
+model UserAnalytics {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  totalProfileViews Int      @default(0)
+  totalProjectClicks Int     @default(0)
+  totalEmailCaptures Int     @default(0)
+  lastViewAt        DateTime?
+  lastClickAt       DateTime?
+  topReferer        String?
+  topCountry        String?
+  updatedAt         DateTime @updatedAt
+  
+  @@map("user_analytics")
+}
+
+// Enums
+enum PlanType {
+  FREE
+  PRO
+  LIFETIME
+}
+
+enum CTAType {
+  DEMO
+  GITHUB
+  WAITLIST
+  BUY
+  CONTACT
+  CUSTOM
+}
+
+enum ProjectStatus {
+  DRAFT
+  LIVE
+  ARCHIVED
+  COMING_SOON
+}
