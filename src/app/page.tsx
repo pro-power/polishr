@@ -20,13 +20,13 @@ export default function HomePage() {
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
           <Link 
-            href="/auth/register"
+            href="/register"
             className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
           >
             Get Started Free
           </Link>
           <Link 
-            href="/auth/login"
+            href="/login"
             className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors text-center"
           >
             Sign In
