@@ -1,131 +1,130 @@
 // src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
-import { 
-  hashPassword, 
-  generateEmailVerificationToken, 
-  isRateLimited,
-  generateUsernameFromEmail 
-} from '@/lib/auth-utils'
-import { 
-  createVerificationEmail, 
-  sendEmail 
-} from '@/lib/email'
-import { registerSchema } from '@/lib/validations/auth'
-import { getClientIP } from '@/lib/api-utils'
+import { registerSchema, RESERVED_USERNAMES } from '@/lib/validations/auth'
+import { withErrorHandling, createResponse, createErrorResponse } from '@/lib/api-utils'
+import { generateEmailToken, sendVerificationEmail, checkEmailRateLimit } from '@/lib/email'
 
-export async function POST(request: NextRequest) {
+// POST /api/auth/register - Register new user
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+
   try {
-    // Rate limiting check
-    const clientIP = getClientIP(request)
-    if (isRateLimited(`register:${clientIP}`, 3, 15 * 60 * 1000)) {
-      return NextResponse.json(
-        { error: 'Too many registration attempts. Please try again later.' },
-        { status: 429 }
+    // Validate input
+    const { email, password, username, displayName } = registerSchema.parse(body)
+
+    // Check rate limiting for email
+    const rateCheck = checkEmailRateLimit(email)
+    if (!rateCheck.allowed) {
+      return createErrorResponse(
+        'Too many registration attempts. Please try again later.',
+        429
       )
     }
 
-    const body = await request.json()
-    
-    // Validate input data
-    const validatedData = registerSchema.parse(body)
-    const { email, password, displayName } = validatedData
+    // Normalize email and username
+    const normalizedEmail = email.toLowerCase()
+    const normalizedUsername = username.toLowerCase()
 
-    // Check if user already exists
-    const existingUser = await db.user.findUnique({
-      where: { email: email.toLowerCase() },
+    // Check if username is reserved
+    if (RESERVED_USERNAMES.includes(normalizedUsername)) {
+      return createErrorResponse(
+        'This username is not available. Please choose a different one.',
+        400
+      )
+    }
+
+    // Check if email already exists
+    const existingEmail = await db.user.findUnique({
+      where: { email: normalizedEmail },
     })
 
-    if (existingUser) {
-      // Don't reveal if user exists for security - but check if verified
-      if (existingUser.emailVerified) {
-        return NextResponse.json(
-          { error: 'An account with this email already exists.' },
-          { status: 400 }
-        )
-      } else {
-        // User exists but not verified - resend verification
-        const token = await generateEmailVerificationToken(existingUser.id)
-        const emailTemplate = createVerificationEmail(
-          existingUser.email, 
-          token, 
-          existingUser.displayName || undefined
-        )
-        
-        await sendEmail(emailTemplate)
-        
-        return NextResponse.json({
-          message: 'Registration successful. Please check your email for verification.',
-          userId: existingUser.id,
-        })
-      }
+    if (existingEmail) {
+      return createErrorResponse(
+        'An account with this email already exists',
+        409
+      )
+    }
+
+    // Check if username already exists
+    const existingUsername = await db.user.findUnique({
+      where: { username: normalizedUsername },
+    })
+
+    if (existingUsername) {
+      return createErrorResponse(
+        'This username is already taken. Please choose a different one.',
+        409
+      )
     }
 
     // Hash password
-    const passwordHash = await hashPassword(password)
-    
-    // Generate unique username from email
-    const suggestedUsername = await generateUsernameFromEmail(email)
+    const saltRounds = 12
+    const passwordHash = await bcrypt.hash(password, saltRounds)
 
-    // Create new user
+    // Generate email verification token
+    const verificationToken = generateEmailToken()
+
+    // Create user
     const user = await db.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         passwordHash,
-        displayName: displayName || null,
-        username: suggestedUsername,
-        themeColor: 'blue', // Default theme
-        planType: 'FREE',
-        isPublic: true,
-        createdAt: new Date(),
+        username: normalizedUsername,
+        displayName,
+        emailVerificationToken: verificationToken,
+        // User starts unverified
+        emailVerified: null,
       },
     })
 
-    // Generate email verification token
-    const verificationToken = await generateEmailVerificationToken(user.id)
-
     // Send verification email
-    const emailTemplate = createVerificationEmail(
-      user.email, 
-      verificationToken, 
-      user.displayName || undefined
+    const emailResult = await sendVerificationEmail(
+      user.email,
+      user.displayName || user.email, // Fallback to email if displayName is null
+      verificationToken
     )
-    
-    const emailResult = await sendEmail(emailTemplate)
-    
+
     if (!emailResult.success) {
       console.error('Failed to send verification email:', emailResult.error)
-      // Don't fail registration if email fails - user can resend later
+      
+      // Still return success but mention email issue
+      return createResponse({
+        message: 'Account created successfully, but failed to send verification email. Please request a new verification email.',
+        userId: user.id,
+        emailSent: false,
+      })
     }
 
-    // Return success (don't include sensitive data)
-    return NextResponse.json({
-      message: 'Registration successful. Please check your email for verification.',
+    return createResponse({
+      message: 'Account created successfully! Please check your email to verify your account.',
       userId: user.id,
+      emailSent: true,
     })
 
   } catch (error) {
     console.error('Registration error:', error)
     
-    // Handle validation errors
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json(
-        { error: 'Invalid input data. Please check your information.' },
-        { status: 400 }
-      )
+    // Handle specific database errors
+    if (error instanceof Error) {
+      if (error.message.includes('Unique constraint failed: users.email')) {
+        return createErrorResponse(
+          'An account with this email already exists',
+          409
+        )
+      }
+      if (error.message.includes('Unique constraint failed: users.username')) {
+        return createErrorResponse(
+          'This username is already taken',
+          409
+        )
+      }
     }
 
-    // Handle database errors
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      return NextResponse.json(
-        { error: 'An account with this email already exists.' },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'An unexpected error occurred. Please try again.' },
-      { status: 500 }
+    return createErrorResponse(
+      'Failed to create account. Please try again.',
+      500
     )
   }
-}
+})

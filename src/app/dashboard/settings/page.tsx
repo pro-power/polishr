@@ -15,8 +15,6 @@ import {
   Eye,
   EyeOff,
   Mail,
-  Smartphone,
-  Globe,
   Download,
   AlertTriangle
 } from 'lucide-react'
@@ -27,26 +25,15 @@ function SettingsContent() {
   
   // Settings state
   const [settings, setSettings] = useState({
-    // Privacy Settings
-    profileVisibility: 'public', // public, private, unlisted
+    profileVisibility: 'public',
     showEmail: false,
     showAnalytics: true,
     allowIndexing: true,
-    
-    // Notification Settings
     emailNotifications: true,
     weeklyReports: true,
-    projectComments: false,
     marketingEmails: false,
-    
-    // Account Settings
     twoFactorEnabled: false,
     loginAlerts: true,
-    dataDownload: false,
-    
-    // Subscription Settings (for future)
-    plan: 'free',
-    autoRenew: true
   })
 
   const [passwordForm, setPasswordForm] = useState({
@@ -63,22 +50,34 @@ function SettingsContent() {
 
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [activeTab, setActiveTab] = useState('privacy')
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/login')
+      router.push('/auth/login')
     }
   }, [status, router])
 
   if (status === 'loading') {
-    return <div>Loading...</div>
+    return (
+      <DashboardLayout>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          height: '100%'
+        }}>
+          <div style={{ color: '#ffffff' }}>Loading...</div>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   if (!session) {
     return null
   }
 
-  const handleSettingChange = (category: string, setting: string, value: any) => {
+  const handleSettingChange = (setting: string, value: any) => {
     setSettings(prev => ({
       ...prev,
       [setting]: value
@@ -89,7 +88,6 @@ function SettingsContent() {
   const handleSaveSettings = async () => {
     setLoading(true)
     try {
-      // TODO: API call to save settings
       await new Promise(resolve => setTimeout(resolve, 1000))
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -108,7 +106,6 @@ function SettingsContent() {
     
     setLoading(true)
     try {
-      // TODO: API call to change password
       await new Promise(resolve => setTimeout(resolve, 1000))
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
       alert('Password changed successfully')
@@ -130,219 +127,160 @@ function SettingsContent() {
       )
       
       if (doubleConfirm === 'DELETE') {
-        // TODO: API call to delete account
         alert('Account deletion would be processed here')
       }
     }
   }
 
-  return (
-    <DashboardLayout>
-      <div style={{ maxWidth: '800px' }}>
-        {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ 
-            fontSize: '28px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            marginBottom: '8px'
-          }}>
-            Account Settings
-          </h1>
-          <p style={{ color: '#6b7280' }}>
-            Manage your account security, privacy, and notification preferences
-          </p>
-        </div>
+  const tabs = [
+    { id: 'privacy', label: 'Privacy', icon: Eye },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'security', label: 'Security', icon: Shield },
+    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
+  ]
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Privacy Settings */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <Eye style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Privacy Settings
-            </h2>
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'privacy':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Profile Visibility */}
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#ffffff',
+                marginBottom: '8px'
+              }}>
+                Profile Visibility
+              </label>
+              <select
+                value={settings.profileVisibility}
+                onChange={(e) => handleSettingChange('profileVisibility', e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #7c3aed',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  backgroundColor: '#1a1a2e',
+                  color: '#ffffff'
+                }}
+              >
+                <option value="public">Public - Anyone can view your profile</option>
+                <option value="unlisted">Unlisted - Only people with the link</option>
+                <option value="private">Private - Only you can view</option>
+              </select>
+            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Profile Visibility */}
+            {/* Privacy Checkboxes */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.showEmail}
+                  onChange={(e) => handleSettingChange('showEmail', e.target.checked)}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px', color: '#ffffff' }}>
+                  Show email address on public profile
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.showAnalytics}
+                  onChange={(e) => handleSettingChange('showAnalytics', e.target.checked)}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px', color: '#ffffff' }}>
+                  Show view counts on projects
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.allowIndexing}
+                  onChange={(e) => handleSettingChange('allowIndexing', e.target.checked)}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px', color: '#ffffff' }}>
+                  Allow search engines to index your profile
+                </span>
+              </label>
+            </div>
+          </div>
+        )
+
+      case 'notifications':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.emailNotifications}
+                onChange={(e) => handleSettingChange('emailNotifications', e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
               <div>
-                <label style={{ 
-                  display: 'block', 
-                  fontSize: '14px', 
-                  fontWeight: '500', 
-                  color: '#374151',
-                  marginBottom: '8px'
-                }}>
-                  Profile Visibility
-                </label>
-                <select
-                  value={settings.profileVisibility}
-                  onChange={(e) => handleSettingChange('privacy', 'profileVisibility', e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    backgroundColor: 'white'
-                  }}
-                >
-                  <option value="public">Public - Anyone can view your profile</option>
-                  <option value="unlisted">Unlisted - Only people with the link</option>
-                  <option value="private">Private - Only you can view</option>
-                </select>
+                <div style={{ fontSize: '14px', color: '#ffffff', fontWeight: '500' }}>
+                  Email notifications
+                </div>
+                <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                  Receive notifications about your account activity
+                </div>
               </div>
+            </label>
 
-              {/* Checkboxes */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.showEmail}
-                    onChange={(e) => handleSettingChange('privacy', 'showEmail', e.target.checked)}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '14px', color: '#374151' }}>
-                    Show email address on public profile
-                  </span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.showAnalytics}
-                    onChange={(e) => handleSettingChange('privacy', 'showAnalytics', e.target.checked)}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '14px', color: '#374151' }}>
-                    Show view counts on projects
-                  </span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.allowIndexing}
-                    onChange={(e) => handleSettingChange('privacy', 'allowIndexing', e.target.checked)}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '14px', color: '#374151' }}>
-                    Allow search engines to index your profile
-                  </span>
-                </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.weeklyReports}
+                onChange={(e) => handleSettingChange('weeklyReports', e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
+              <div>
+                <div style={{ fontSize: '14px', color: '#ffffff', fontWeight: '500' }}>
+                  Weekly analytics reports
+                </div>
+                <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                  Get weekly summaries of your profile performance
+                </div>
               </div>
-            </div>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.marketingEmails}
+                onChange={(e) => handleSettingChange('marketingEmails', e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
+              <div>
+                <div style={{ fontSize: '14px', color: '#ffffff', fontWeight: '500' }}>
+                  Marketing emails
+                </div>
+                <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                  Receive updates about new features and tips
+                </div>
+              </div>
+            </label>
           </div>
+        )
 
-          {/* Notification Settings */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <Bell style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Email Notifications
-            </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={settings.emailNotifications}
-                  onChange={(e) => handleSettingChange('notifications', 'emailNotifications', e.target.checked)}
-                  style={{ width: '16px', height: '16px' }}
-                />
-                <div>
-                  <div style={{ fontSize: '14px', color: '#374151', fontWeight: '500' }}>
-                    Email notifications
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    Receive notifications about your account activity
-                  </div>
-                </div>
-              </label>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={settings.weeklyReports}
-                  onChange={(e) => handleSettingChange('notifications', 'weeklyReports', e.target.checked)}
-                  style={{ width: '16px', height: '16px' }}
-                />
-                <div>
-                  <div style={{ fontSize: '14px', color: '#374151', fontWeight: '500' }}>
-                    Weekly analytics reports
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    Get weekly summaries of your profile performance
-                  </div>
-                </div>
-              </label>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={settings.marketingEmails}
-                  onChange={(e) => handleSettingChange('notifications', 'marketingEmails', e.target.checked)}
-                  style={{ width: '16px', height: '16px' }}
-                />
-                <div>
-                  <div style={{ fontSize: '14px', color: '#374151', fontWeight: '500' }}>
-                    Marketing emails
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    Receive updates about new features and tips
-                  </div>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          {/* Security Settings */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <Shield style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Security
-            </h2>
-
+      case 'security':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Change Password */}
-            <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#111827' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#ffffff' }}>
                 Change Password
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPasswords.current ? 'text' : 'password'}
@@ -351,10 +289,12 @@ function SettingsContent() {
                     onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '12px 40px 12px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontSize: '16px'
+                      padding: '10px 40px 10px 12px',
+                      border: '1px solid #7c3aed',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      backgroundColor: '#1a1a2e',
+                      color: '#ffffff'
                     }}
                   />
                   <button
@@ -367,7 +307,8 @@ function SettingsContent() {
                       transform: 'translateY(-50%)',
                       border: 'none',
                       backgroundColor: 'transparent',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      color: '#a1a1aa'
                     }}
                   >
                     {showPasswords.current ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -382,10 +323,12 @@ function SettingsContent() {
                     onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '12px 40px 12px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontSize: '16px'
+                      padding: '10px 40px 10px 12px',
+                      border: '1px solid #7c3aed',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      backgroundColor: '#1a1a2e',
+                      color: '#ffffff'
                     }}
                   />
                   <button
@@ -398,7 +341,8 @@ function SettingsContent() {
                       transform: 'translateY(-50%)',
                       border: 'none',
                       backgroundColor: 'transparent',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      color: '#a1a1aa'
                     }}
                   >
                     {showPasswords.new ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -413,10 +357,12 @@ function SettingsContent() {
                     onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '12px 40px 12px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontSize: '16px'
+                      padding: '10px 40px 10px 12px',
+                      border: '1px solid #7c3aed',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      backgroundColor: '#1a1a2e',
+                      color: '#ffffff'
                     }}
                   />
                   <button
@@ -429,7 +375,8 @@ function SettingsContent() {
                       transform: 'translateY(-50%)',
                       border: 'none',
                       backgroundColor: 'transparent',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      color: '#a1a1aa'
                     }}
                   >
                     {showPasswords.confirm ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -440,13 +387,14 @@ function SettingsContent() {
                   onClick={handlePasswordChange}
                   disabled={loading || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
                   style={{
-                    padding: '12px 24px',
-                    backgroundColor: '#3b82f6',
+                    padding: '10px 16px',
+                    backgroundColor: '#7c3aed',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
                     fontWeight: '500',
+                    fontSize: '14px',
                     opacity: loading ? 0.7 : 1,
                     width: 'fit-content'
                   }}
@@ -457,20 +405,20 @@ function SettingsContent() {
             </div>
 
             {/* Two-Factor Authentication */}
-            <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+            <div style={{ padding: '16px', backgroundColor: 'rgba(124, 58, 237, 0.1)', borderRadius: '8px', border: '1px solid rgba(124, 58, 237, 0.3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px', color: '#111827' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: '#ffffff' }}>
                     Two-Factor Authentication
                   </h3>
-                  <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                  <p style={{ fontSize: '12px', color: '#a1a1aa' }}>
                     Add an extra layer of security to your account
                   </p>
                 </div>
                 <div style={{
-                  padding: '6px 12px',
-                  backgroundColor: settings.twoFactorEnabled ? '#dcfce7' : '#fef3c7',
-                  color: settings.twoFactorEnabled ? '#166534' : '#92400e',
+                  padding: '4px 8px',
+                  backgroundColor: settings.twoFactorEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                  color: settings.twoFactorEnabled ? '#10b981' : '#f59e0b',
                   borderRadius: '12px',
                   fontSize: '12px',
                   fontWeight: '500'
@@ -482,7 +430,7 @@ function SettingsContent() {
                 style={{
                   marginTop: '12px',
                   padding: '8px 16px',
-                  backgroundColor: settings.twoFactorEnabled ? '#dc2626' : '#3b82f6',
+                  backgroundColor: settings.twoFactorEnabled ? '#ef4444' : '#7c3aed',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -495,148 +443,233 @@ function SettingsContent() {
               </button>
             </div>
           </div>
+        )
 
-          {/* Subscription Settings (Pro Feature Preview) */}
+      case 'billing':
+        return (
           <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
+            padding: '20px',
+            backgroundColor: 'rgba(124, 58, 237, 0.1)',
+            borderRadius: '8px',
+            border: '1px solid rgba(124, 58, 237, 0.3)',
+            textAlign: 'center'
           }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <CreditCard style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Subscription
-            </h2>
-
-            <div style={{
-              padding: '20px',
-              backgroundColor: '#f9fafb',
-              borderRadius: '8px',
-              border: '1px solid #e5e7eb'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                    Current Plan: Free
-                  </h3>
-                  <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                    Upgrade to Pro for unlimited projects and advanced features
-                  </p>
-                </div>
-                <button
-                  style={{
-                    padding: '12px 20px',
-                    backgroundColor: '#8b5cf6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  Upgrade to Pro
-                </button>
-              </div>
-              <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                • 3 projects (3/3 used)<br />
-                • Basic analytics<br />
-                • DevStack branding
-              </div>
+            <div style={{ marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#ffffff' }}>
+                Current Plan: Free
+              </h3>
+              <p style={{ fontSize: '14px', color: '#a1a1aa' }}>
+                Upgrade to Pro for unlimited projects and advanced features
+              </p>
+            </div>
+            <button
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '500',
+                marginBottom: '12px'
+              }}
+            >
+              Upgrade to Pro
+            </button>
+            <div style={{ fontSize: '12px', color: '#a1a1aa', textAlign: 'left' }}>
+              • 3 projects (3/3 used)<br />
+              • Basic analytics<br />
+              • DevStack branding
             </div>
           </div>
+        )
 
-          {/* Data & Privacy */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <Download style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Data & Privacy
-            </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      case 'danger':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
               <button
                 style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#f3f4f6',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                  border: '1px solid rgba(124, 58, 237, 0.3)',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  textAlign: 'left',
                   fontSize: '14px',
                   fontWeight: '500',
-                  color: '#374151'
+                  color: '#7c3aed',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
+                <Download style={{ height: '16px', width: '16px', marginRight: '8px' }} />
                 Download Your Data
               </button>
-              <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '-8px' }}>
+              <p style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '8px' }}>
                 Export all your profile data, projects, and analytics
               </p>
             </div>
-          </div>
 
-          {/* Danger Zone */}
-          <div style={{
-            backgroundColor: '#fef2f2',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #fecaca'
-          }}>
-            <h2 style={{ 
-              fontSize: '18px', 
-              fontWeight: 'bold', 
-              color: '#dc2626',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center'
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+              borderRadius: '8px',
+              border: '1px solid rgba(239, 68, 68, 0.3)'
             }}>
-              <AlertTriangle style={{ height: '20px', width: '20px', marginRight: '8px' }} />
-              Danger Zone
-            </h2>
-
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', color: '#dc2626' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#ef4444' }}>
                 Delete Account
               </h3>
-              <p style={{ fontSize: '14px', color: '#7f1d1d', marginBottom: '12px' }}>
+              <p style={{ fontSize: '12px', color: '#ef4444', marginBottom: '12px' }}>
                 Permanently delete your account and all associated data. This action cannot be undone.
               </p>
               <button
                 onClick={handleDeleteAccount}
                 style={{
-                  padding: '12px 20px',
-                  backgroundColor: '#dc2626',
+                  padding: '10px 16px',
+                  backgroundColor: '#ef4444',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
+                <Trash2 style={{ height: '16px', width: '16px', marginRight: '8px' }} />
                 Delete Account
               </button>
             </div>
           </div>
+        )
 
-          {/* Save Button */}
+      default:
+        return null
+    }
+  }
+
+  return (
+    <DashboardLayout>
+      <div style={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        gap: '16px',
+        overflow: 'hidden'
+      }}>
+        {/* Header */}
+        <div style={{ 
+          backgroundColor: '#1a1a2e',
+          padding: '16px',
+          borderRadius: '8px',
+          border: '1px solid #7c3aed'
+        }}>
+          <h1 style={{ 
+            fontSize: '20px', 
+            fontWeight: 'bold', 
+            color: '#ffffff',
+            margin: '0 0 4px 0'
+          }}>
+            Account Settings
+          </h1>
+          <p style={{ color: '#a1a1aa', fontSize: '14px', margin: 0 }}>
+            Manage your account security, privacy, and notification preferences
+          </p>
+        </div>
+
+        {/* Main Content */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '200px 1fr',
+          gap: '16px',
+          flex: 1,
+          minHeight: 0
+        }}>
+          {/* Tabs Sidebar */}
+          <div style={{
+            backgroundColor: '#1a1a2e',
+            borderRadius: '8px',
+            border: '1px solid #7c3aed',
+            padding: '12px'
+          }}>
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.id
+              
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '10px 12px',
+                    marginBottom: '4px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: isActive ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
+                    color: isActive ? '#7c3aed' : '#a1a1aa',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    textAlign: 'left',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.1)'
+                      e.currentTarget.style.color = '#ffffff'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                      e.currentTarget.style.color = '#a1a1aa'
+                    }
+                  }}
+                >
+                  <Icon style={{ height: '16px', width: '16px', marginRight: '8px' }} />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Tab Content */}
+          <div style={{
+            backgroundColor: '#1a1a2e',
+            padding: '20px',
+            borderRadius: '8px',
+            border: '1px solid #7c3aed',
+            overflow: 'auto'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginBottom: '16px' 
+            }}>
+              {(() => {
+                const activeTabData = tabs.find(tab => tab.id === activeTab)
+                const Icon = activeTabData?.icon
+                return (
+                  <>
+                    {Icon && <Icon style={{ height: '18px', width: '18px', marginRight: '8px', color: '#7c3aed' }} />}
+                    <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff', margin: 0 }}>
+                      {activeTabData?.label}
+                    </h2>
+                  </>
+                )
+              })()}
+            </div>
+            
+            {renderTabContent()}
+          </div>
+        </div>
+
+        {/* Save Button */}
+        {activeTab !== 'security' && activeTab !== 'danger' && (
           <button
             onClick={handleSaveSettings}
             disabled={loading}
@@ -644,32 +677,34 @@ function SettingsContent() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '16px 24px',
-              backgroundColor: saved ? '#10b981' : '#3b82f6',
+              padding: '12px 20px',
+              backgroundColor: saved ? '#10b981' : '#7c3aed',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
               cursor: loading ? 'not-allowed' : 'pointer',
               fontWeight: '500',
-              fontSize: '16px',
-              opacity: loading ? 0.7 : 1
+              fontSize: '14px',
+              opacity: loading ? 0.7 : 1,
+              width: 'fit-content',
+              alignSelf: 'flex-end'
             }}
           >
             {loading ? (
               'Saving...'
             ) : saved ? (
               <>
-                <SettingsIcon style={{ height: '20px', width: '20px', marginRight: '8px' }} />
+                <SettingsIcon style={{ height: '16px', width: '16px', marginRight: '8px' }} />
                 Settings Saved!
               </>
             ) : (
               <>
-                <SettingsIcon style={{ height: '20px', width: '20px', marginRight: '8px' }} />
+                <SettingsIcon style={{ height: '16px', width: '16px', marginRight: '8px' }} />
                 Save Settings
               </>
             )}
           </button>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   )

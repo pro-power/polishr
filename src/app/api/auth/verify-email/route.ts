@@ -1,43 +1,132 @@
 // src/app/api/auth/verify-email/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyEmailVerificationToken } from '@/lib/auth-utils'
+import { db } from '@/lib/db'
 import { emailVerificationSchema } from '@/lib/validations/auth'
+import { withErrorHandling, createResponse, createErrorResponse } from '@/lib/api-utils'
 
-export async function POST(request: NextRequest) {
+// GET /api/auth/verify-email?token=xxx - Verify email with token
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  const { searchParams } = new URL(request.url)
+  const token = searchParams.get('token')
+
+  if (!token) {
+    return createErrorResponse('Verification token is required', 400)
+  }
+
   try {
-    const body = await request.json()
-    
-    // Validate input
-    const { token } = emailVerificationSchema.parse(body)
+    // Validate token format
+    emailVerificationSchema.parse({ token })
 
-    // Verify the email verification token
-    const result = await verifyEmailVerificationToken(token)
+    // Find user with this verification token
+    const user = await db.user.findFirst({
+      where: {
+        emailVerificationToken: token,
+        emailVerified: null, // Only allow verification if not already verified
+      },
+    })
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Invalid or expired verification token' },
-        { status: 400 }
+    if (!user) {
+      return createErrorResponse(
+        'Invalid or expired verification token. Please request a new verification email.',
+        400
       )
     }
 
-    return NextResponse.json({
-      message: 'Email verified successfully. You can now sign in.',
-      userId: result.userId,
+    // Update user as verified and remove the token
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: new Date(),
+        emailVerificationToken: null,
+      },
+    })
+
+    return createResponse({
+      message: 'Email verified successfully',
+      verified: true,
     })
 
   } catch (error) {
     console.error('Email verification error:', error)
+    return createErrorResponse(
+      'Failed to verify email. Please try again or request a new verification email.',
+      500
+    )
+  }
+})
+
+// POST /api/auth/verify-email - Resend verification email
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+  const { email } = body
+
+  if (!email) {
+    return createErrorResponse('Email is required', 400)
+  }
+
+  try {
+    // Find user by email
+    const user = await db.user.findUnique({
+      where: { email: email.toLowerCase() },
+    })
+
+    if (!user) {
+      // Don't reveal if email exists or not for security
+      return createResponse({
+        message: 'If an account with that email exists, a verification email has been sent.',
+      })
+    }
+
+    if (user.emailVerified) {
+      return createErrorResponse('Email is already verified', 400)
+    }
+
+    // Check rate limiting
+    const { checkEmailRateLimit, generateEmailToken, sendVerificationEmail } = await import('@/lib/email')
     
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json(
-        { error: 'Invalid verification token format' },
-        { status: 400 }
+    const rateCheck = checkEmailRateLimit(email)
+    if (!rateCheck.allowed) {
+      return createErrorResponse(
+        'Too many verification emails sent. Please try again later.',
+        429
       )
     }
 
-    return NextResponse.json(
-      { error: 'An unexpected error occurred during verification' },
-      { status: 500 }
+    // Generate new verification token
+    const verificationToken = generateEmailToken()
+
+    // Update user with new token
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationToken: verificationToken,
+      },
+    })
+
+    // Send verification email
+    const emailResult = await sendVerificationEmail(
+      user.email,
+      user.displayName || user.email,
+      verificationToken
+    )
+
+    if (!emailResult.success) {
+      console.error('Failed to send verification email:', emailResult.error)
+      return createErrorResponse(
+        'Failed to send verification email. Please try again.',
+        500
+      )
+    }
+
+    return createResponse({
+      message: 'Verification email sent successfully',
+    })
+
+  } catch (error) {
+    console.error('Resend verification error:', error)
+    return createErrorResponse(
+      'Failed to resend verification email. Please try again.',
+      500
     )
   }
-}
+})

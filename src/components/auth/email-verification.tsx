@@ -47,7 +47,7 @@ export function EmailVerification() {
         
         // Redirect to login after 3 seconds
         setTimeout(() => {
-          router.push('/login?verified=true')
+          router.push('/auth/login?verified=true')
         }, 3000)
       } else {
         setStatus('error')
@@ -133,7 +133,7 @@ export function EmailVerification() {
           </p>
         </div>
         <Button asChild>
-          <Link href="/login">Continue to Login</Link>
+          <Link href="/auth/login">Continue to Login</Link>
         </Button>
       </div>
     )
@@ -209,7 +209,7 @@ export function EmailVerification() {
       )}
       
       <div className="text-sm">
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/auth/login" className="text-primary hover:underline">
           Back to login
         </Link>
       </div>

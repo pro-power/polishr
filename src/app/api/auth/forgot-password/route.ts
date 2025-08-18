@@ -1,30 +1,26 @@
 // src/app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { 
-  generatePasswordResetToken, 
-  isRateLimited 
-} from '@/lib/auth-utils'
-import { 
-  createPasswordResetEmail, 
-  sendEmail 
-} from '@/lib/email'
-import { passwordResetSchema } from '@/lib/validations/auth'
-import { getClientIP } from '@/lib/api-utils'
+import { forgotPasswordSchema } from '@/lib/validations/auth'
+import { withErrorHandling, createResponse, createErrorResponse } from '@/lib/api-utils'
+import { checkEmailRateLimit, generateEmailToken, sendPasswordResetEmail } from '@/lib/email'
 
-export async function POST(request: NextRequest) {
+// POST /api/auth/forgot-password - Send password reset email
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+
   try {
-    // Rate limiting check
-    const clientIP = getClientIP(request)
-    if (isRateLimited(`password-reset:${clientIP}`, 3, 15 * 60 * 1000)) {
-      return NextResponse.json(
-        { error: 'Too many password reset attempts. Please wait before trying again.' },
-        { status: 429 }
+    // Validate input
+    const { email } = forgotPasswordSchema.parse(body)
+
+    // Check rate limiting
+    const rateCheck = checkEmailRateLimit(email)
+    if (!rateCheck.allowed) {
+      return createErrorResponse(
+        'Too many password reset requests. Please try again later.',
+        429
       )
     }
-
-    const body = await request.json()
-    const { email } = passwordResetSchema.parse(body)
 
     // Find user by email
     const user = await db.user.findUnique({
@@ -33,77 +29,61 @@ export async function POST(request: NextRequest) {
 
     // Always return success for security (don't reveal if email exists)
     if (!user) {
-      return NextResponse.json({
-        message: 'If an account with this email exists, we\'ve sent a password reset link.',
+      return createResponse({
+        message: 'If an account with that email exists, a password reset link has been sent.',
       })
     }
 
-    // Check if email is verified
+    // Check if user's email is verified
     if (!user.emailVerified) {
-      return NextResponse.json({
-        message: 'Please verify your email address before resetting your password.',
-      })
-    }
-
-    // Generate password reset token
-    const tokenResult = await generatePasswordResetToken(email.toLowerCase())
-    
-    if (!tokenResult.success) {
-      console.error('Failed to generate reset token:', tokenResult.error)
-      return NextResponse.json(
-        { error: 'Failed to generate reset token. Please try again.' },
-        { status: 500 }
+      return createErrorResponse(
+        'Please verify your email address before requesting a password reset.',
+        400
       )
     }
 
-    // Get the actual token from database to send in email
-    const resetToken = await db.passwordResetToken.findFirst({
-      where: { 
-        userId: user.id,
-        used: false,
-        expiresAt: { gt: new Date() }
-      },
-      orderBy: { createdAt: 'desc' }
+    // Generate reset token
+    const resetToken = generateEmailToken()
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour from now
+
+    // Delete any existing reset tokens for this user
+    await db.passwordResetToken.deleteMany({
+      where: { userId: user.id },
     })
 
-    if (!resetToken) {
-      return NextResponse.json(
-        { error: 'Failed to create reset token. Please try again.' },
-        { status: 500 }
+    // Create new reset token
+    await db.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token: resetToken,
+        expiresAt,
+      },
+    })
+
+    // Send password reset email
+    const emailResult = await sendPasswordResetEmail(
+      user.email,
+      user.displayName || user.email,
+      resetToken
+    )
+
+    if (!emailResult.success) {
+      console.error('Failed to send password reset email:', emailResult.error)
+      return createErrorResponse(
+        'Failed to send password reset email. Please try again.',
+        500
       )
     }
 
-    // Send password reset email
-    const emailTemplate = createPasswordResetEmail(
-      user.email, 
-      resetToken.token, 
-      user.displayName || undefined
-    )
-    
-    const emailResult = await sendEmail(emailTemplate)
-    
-    if (!emailResult.success) {
-      console.error('Failed to send password reset email:', emailResult.error)
-      // Don't reveal email sending failure for security
-    }
-
-    return NextResponse.json({
-      message: 'If an account with this email exists, we\'ve sent a password reset link.',
+    return createResponse({
+      message: 'If an account with that email exists, a password reset link has been sent.',
     })
 
   } catch (error) {
-    console.error('Password reset error:', error)
-    
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json(
-        { error: 'Invalid email address' },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'An unexpected error occurred. Please try again.' },
-      { status: 500 }
+    console.error('Forgot password error:', error)
+    return createErrorResponse(
+      'Failed to process password reset request. Please try again.',
+      500
     )
   }
-}
+})

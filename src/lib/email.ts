@@ -1,142 +1,141 @@
 // src/lib/email.ts
 import { Resend } from 'resend'
 
-// PROD: Configure with actual Resend API key
-const resend = new Resend(process.env.RESEND_API_KEY || 'dev-key')
-
-const APP_NAME = process.env.APP_NAME || 'DevStack Link'
-const APP_URL = process.env.APP_URL || 'http://localhost:3000'
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@devstack.link'
-
-export interface EmailTemplate {
-  to: string
-  subject: string
-  html: string
-  text: string
+if (!process.env.RESEND_API_KEY) {
+  throw new Error('RESEND_API_KEY is not set in environment variables')
 }
 
-// Email verification template
-export function createVerificationEmail(
-  email: string, 
-  token: string, 
-  displayName?: string
-): EmailTemplate {
-  const verificationUrl = `${APP_URL}/auth/verify-email?token=${token}`
-  const name = displayName || email.split('@')[0]
+const resend = new Resend(process.env.RESEND_API_KEY)
 
-  return {
-    to: email,
-    subject: `Welcome to ${APP_NAME} - Verify your email`,
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@devstack.link'
+const DOMAIN = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
+// Email templates
+export const emailTemplates = {
+  emailVerification: (name: string, verificationUrl: string) => ({
+    subject: 'Verify your DevStack Link account',
     html: `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Verify your email</title>
+          <title>Verify Your Account</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
             .header { text-align: center; margin-bottom: 30px; }
-            .logo { font-size: 24px; font-weight: bold; color: #6366f1; }
-            .button { display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }
-            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #6b7280; }
+            .logo { color: #3b82f6; font-size: 24px; font-weight: bold; }
+            .button { 
+              display: inline-block; 
+              padding: 12px 24px; 
+              background-color: #3b82f6; 
+              color: white; 
+              text-decoration: none; 
+              border-radius: 6px; 
+              margin: 20px 0;
+            }
+            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">${APP_NAME}</div>
+              <div class="logo">DevStack Link</div>
             </div>
             
-            <h1>Welcome to ${APP_NAME}, ${name}!</h1>
+            <h2>Welcome to DevStack Link, ${name}!</h2>
             
-            <p>Thanks for signing up! We're excited to have you on board. To get started, please verify your email address by clicking the button below:</p>
+            <p>Thank you for signing up! To complete your registration and start building your developer portfolio, please verify your email address.</p>
             
-            <p style="text-align: center; margin: 30px 0;">
+            <div style="text-align: center;">
               <a href="${verificationUrl}" class="button">Verify Email Address</a>
-            </p>
+            </div>
             
             <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; color: #6b7280;">${verificationUrl}</p>
+            <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
+              ${verificationUrl}
+            </p>
             
-            <p>This verification link will expire in 24 hours.</p>
+            <p>This verification link will expire in 24 hours for security reasons.</p>
             
             <div class="footer">
-              <p>If you didn't create an account with ${APP_NAME}, you can safely ignore this email.</p>
-              <p>Need help? Contact us at support@devstack.link</p>
+              <p>If you didn't create an account with DevStack Link, you can safely ignore this email.</p>
+              <p>Best regards,<br>The DevStack Link Team</p>
             </div>
           </div>
         </body>
       </html>
     `,
     text: `
-      Welcome to ${APP_NAME}, ${name}!
+      Welcome to DevStack Link, ${name}!
       
-      Thanks for signing up! To get started, please verify your email address by visiting:
-      ${verificationUrl}
+      Thank you for signing up! To complete your registration and start building your developer portfolio, please verify your email address.
       
-      This verification link will expire in 24 hours.
+      Click here to verify: ${verificationUrl}
       
-      If you didn't create an account with ${APP_NAME}, you can safely ignore this email.
+      This verification link will expire in 24 hours for security reasons.
       
-      Need help? Contact us at support@devstack.link
-    `,
-  }
-}
+      If you didn't create an account with DevStack Link, you can safely ignore this email.
+      
+      Best regards,
+      The DevStack Link Team
+    `
+  }),
 
-// Password reset template
-export function createPasswordResetEmail(
-  email: string, 
-  token: string,
-  displayName?: string
-): EmailTemplate {
-  const resetUrl = `${APP_URL}/auth/reset-password?token=${token}`
-  const name = displayName || email.split('@')[0]
-
-  return {
-    to: email,
-    subject: `${APP_NAME} - Password Reset Request`,
+  passwordReset: (name: string, resetUrl: string) => ({
+    subject: 'Reset your DevStack Link password',
     html: `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Reset your password</title>
+          <title>Reset Your Password</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
             .header { text-align: center; margin-bottom: 30px; }
-            .logo { font-size: 24px; font-weight: bold; color: #6366f1; }
-            .button { display: inline-block; padding: 12px 24px; background: #dc2626; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }
-            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #6b7280; }
+            .logo { color: #3b82f6; font-size: 24px; font-weight: bold; }
+            .button { 
+              display: inline-block; 
+              padding: 12px 24px; 
+              background-color: #dc2626; 
+              color: white; 
+              text-decoration: none; 
+              border-radius: 6px; 
+              margin: 20px 0;
+            }
+            .warning { background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0; }
+            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">${APP_NAME}</div>
+              <div class="logo">DevStack Link</div>
             </div>
             
-            <h1>Password Reset Request</h1>
+            <h2>Password Reset Request</h2>
             
             <p>Hi ${name},</p>
             
-            <p>We received a request to reset your password for your ${APP_NAME} account. Click the button below to create a new password:</p>
+            <p>We received a request to reset the password for your DevStack Link account. If you made this request, click the button below to reset your password:</p>
             
-            <p style="text-align: center; margin: 30px 0;">
+            <div style="text-align: center;">
               <a href="${resetUrl}" class="button">Reset Password</a>
-            </p>
+            </div>
             
             <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; color: #6b7280;">${resetUrl}</p>
+            <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
+              ${resetUrl}
+            </p>
             
-            <p>This password reset link will expire in 1 hour.</p>
+            <div class="warning">
+              <strong>Security Notice:</strong> This password reset link will expire in 1 hour for security reasons. If you didn't request a password reset, you can safely ignore this email.
+            </div>
             
             <div class="footer">
-              <p>If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.</p>
-              <p>Need help? Contact us at support@devstack.link</p>
+              <p>If you're having trouble with your account, please contact our support team.</p>
+              <p>Best regards,<br>The DevStack Link Team</p>
             </div>
           </div>
         </body>
@@ -147,52 +146,121 @@ export function createPasswordResetEmail(
       
       Hi ${name},
       
-      We received a request to reset your password for your ${APP_NAME} account. 
+      We received a request to reset the password for your DevStack Link account. If you made this request, click the link below to reset your password:
       
-      Click this link to create a new password:
       ${resetUrl}
       
-      This password reset link will expire in 1 hour.
+      This password reset link will expire in 1 hour for security reasons.
       
       If you didn't request a password reset, you can safely ignore this email.
       
-      Need help? Contact us at support@devstack.link
-    `,
-  }
+      Best regards,
+      The DevStack Link Team
+    `
+  })
 }
 
-// Send email function
-export async function sendEmail(template: EmailTemplate): Promise<{ success: boolean; error?: string }> {
-  try {
-    // PROD: Use actual Resend service in production
-    if (process.env.NODE_ENV === 'development') {
-      console.log('📧 Email would be sent in production:')
-      console.log(`To: ${template.to}`)
-      console.log(`Subject: ${template.subject}`)
-      console.log(`Preview: ${template.text.slice(0, 100)}...`)
-      return { success: true }
-    }
+// Send email verification
+export async function sendVerificationEmail(
+  email: string,
+  name: string,
+  token: string
+) {
+  const verificationUrl = `${DOMAIN}/auth/verify-email?token=${token}`
+  const template = emailTemplates.emailVerification(name, verificationUrl)
 
-    const { data, error } = await resend.emails.send({
+  try {
+    const result = await resend.emails.send({
       from: FROM_EMAIL,
-      to: template.to,
+      to: email,
       subject: template.subject,
       html: template.html,
       text: template.text,
     })
 
-    if (error) {
-      console.error('Email sending failed:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('Email sent successfully:', data?.id)
-    return { success: true }
+    return { success: true, data: result }
   } catch (error) {
-    console.error('Email service error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }
+    console.error('Failed to send verification email:', error)
+    return { success: false, error }
   }
 }
+
+// Send password reset email
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  token: string
+) {
+  const resetUrl = `${DOMAIN}/auth/reset-password/${token}`
+  const template = emailTemplates.passwordReset(name, resetUrl)
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+    })
+
+    return { success: true, data: result }
+  } catch (error) {
+    console.error('Failed to send password reset email:', error)
+    return { success: false, error }
+  }
+}
+
+// Generate secure random token
+export function generateEmailToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+// Validate email format
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+// Rate limiting for email sends
+const emailRateLimit = new Map<string, { count: number; resetTime: number }>()
+
+export function checkEmailRateLimit(email: string): { allowed: boolean; resetTime?: number } {
+  const now = Date.now()
+  const windowMs = 60 * 60 * 1000 // 1 hour
+  const maxEmails = 5 // Max 5 emails per hour per email address
+
+  const record = emailRateLimit.get(email)
+
+  if (!record) {
+    emailRateLimit.set(email, { count: 1, resetTime: now + windowMs })
+    return { allowed: true }
+  }
+
+  if (now > record.resetTime) {
+    // Reset the window
+    emailRateLimit.set(email, { count: 1, resetTime: now + windowMs })
+    return { allowed: true }
+  }
+
+  if (record.count >= maxEmails) {
+    return { allowed: false, resetTime: record.resetTime }
+  }
+
+  record.count++
+  return { allowed: true }
+}
+
+// Clean up rate limit records periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [email, record] of emailRateLimit.entries()) {
+    if (now > record.resetTime) {
+      emailRateLimit.delete(email)
+    }
+  }
+}, 10 * 60 * 1000) // Clean up every 10 minutes

@@ -1,52 +1,129 @@
 // src/app/api/auth/reset-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { resetPasswordWithToken, isRateLimited } from '@/lib/auth-utils'
-import { newPasswordSchema } from '@/lib/validations/auth'
-import { getClientIP } from '@/lib/api-utils'
+import bcrypt from 'bcryptjs'
+import { db } from '@/lib/db'
+import { resetPasswordSchema } from '@/lib/validations/auth'
+import { withErrorHandling, createResponse, createErrorResponse } from '@/lib/api-utils'
 
-export async function POST(request: NextRequest) {
+// POST /api/auth/reset-password - Reset password with token
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+
   try {
-    // Rate limiting check
-    const clientIP = getClientIP(request)
-    if (isRateLimited(`reset-password:${clientIP}`, 5, 15 * 60 * 1000)) {
-      return NextResponse.json(
-        { error: 'Too many password reset attempts. Please wait before trying again.' },
-        { status: 429 }
-      )
-    }
-
-    const body = await request.json()
-    
     // Validate input
-    const { password, token } = newPasswordSchema.parse(body)
+    const { token, password } = resetPasswordSchema.parse(body)
 
-    // Reset password with token
-    const result = await resetPasswordWithToken(token, password)
+    // Find valid reset token
+    const resetTokenRecord = await db.passwordResetToken.findFirst({
+      where: {
+        token,
+        used: false,
+        expiresAt: {
+          gt: new Date(), // Token must not be expired
+        },
+      },
+      include: {
+        user: true,
+      },
+    })
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Invalid or expired reset token' },
-        { status: 400 }
+    if (!resetTokenRecord) {
+      return createErrorResponse(
+        'Invalid or expired reset token. Please request a new password reset.',
+        400
       )
     }
 
-    return NextResponse.json({
+    // Hash the new password
+    const saltRounds = 12
+    const passwordHash = await bcrypt.hash(password, saltRounds)
+
+    // Update user's password and mark token as used
+    await db.$transaction([
+      // Update user password
+      db.user.update({
+        where: { id: resetTokenRecord.userId },
+        data: {
+          passwordHash,
+          // Update lastLoginAt to current time since password was successfully reset
+          updatedAt: new Date(),
+        },
+      }),
+      // Mark token as used
+      db.passwordResetToken.update({
+        where: { id: resetTokenRecord.id },
+        data: { used: true },
+      }),
+      // Delete all other unused tokens for this user
+      db.passwordResetToken.deleteMany({
+        where: {
+          userId: resetTokenRecord.userId,
+          used: false,
+          id: { not: resetTokenRecord.id },
+        },
+      }),
+    ])
+
+    return createResponse({
       message: 'Password reset successfully. You can now sign in with your new password.',
     })
 
   } catch (error) {
-    console.error('Password reset error:', error)
-    
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json(
-        { error: 'Invalid input data. Please check your password requirements.' },
-        { status: 400 }
+    console.error('Reset password error:', error)
+    return createErrorResponse(
+      'Failed to reset password. Please try again or request a new reset link.',
+      500
+    )
+  }
+})
+
+// GET /api/auth/reset-password?token=xxx - Validate reset token
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  const { searchParams } = new URL(request.url)
+  const token = searchParams.get('token')
+
+  if (!token) {
+    return createErrorResponse('Reset token is required', 400)
+  }
+
+  try {
+    // Check if token exists and is valid
+    const resetTokenRecord = await db.passwordResetToken.findFirst({
+      where: {
+        token,
+        used: false,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      include: {
+        user: {
+          select: {
+            email: true,
+            displayName: true,
+          },
+        },
+      },
+    })
+
+    if (!resetTokenRecord) {
+      return createErrorResponse(
+        'Invalid or expired reset token',
+        400
       )
     }
 
-    return NextResponse.json(
-      { error: 'An unexpected error occurred during password reset' },
-      { status: 500 }
+    return createResponse({
+      valid: true,
+      email: resetTokenRecord.user.email,
+      expiresAt: resetTokenRecord.expiresAt,
+    })
+
+  } catch (error) {
+    console.error('Token validation error:', error)
+    return createErrorResponse(
+      'Failed to validate reset token',
+      500
     )
   }
-}
+})

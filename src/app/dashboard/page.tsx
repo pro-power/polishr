@@ -13,48 +13,39 @@ import {
   FolderOpen,
   Plus,
   TrendingUp,
-  Users
+  Users,
+  Settings,
+  ExternalLink
 } from 'lucide-react'
 
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [stats, setStats] = useState({
-    totalProjects: 0,
-    totalViews: 0,
-    totalClicks: 0,
-    totalEmailCaptures: 0
+    totalProjects: 3,
+    totalViews: 127,
+    totalClicks: 48,
+    totalEmailCaptures: 12
   })
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/login')
+      router.push('/auth/login')
     }
   }, [status, router])
 
-  useEffect(() => {
-    // Fetch user stats
-    if (session?.user?.id) {
-      // TODO: Replace with actual API call
-      setStats({
-        totalProjects: 3,
-        totalViews: 127,
-        totalClicks: 48,
-        totalEmailCaptures: 12
-      })
-    }
-  }, [session])
-
   if (status === 'loading') {
     return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        minHeight: '100vh'
-      }}>
-        <div>Loading...</div>
-      </div>
+      <DashboardLayout>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          height: '100%'
+        }}>
+          <div style={{ color: '#ffffff' }}>Loading...</div>
+        </div>
+      </DashboardLayout>
     )
   }
 
@@ -64,59 +55,65 @@ function DashboardContent() {
 
   const statCards = [
     {
-      name: 'Total Projects',
+      name: 'Projects',
       value: stats.totalProjects,
       icon: FolderOpen,
-      color: '#3b82f6',
-      bgColor: '#eff6ff'
+      color: '#7c3aed'
     },
     {
-      name: 'Profile Views',
+      name: 'Views',
       value: stats.totalViews,
       icon: Eye,
-      color: '#10b981',
-      bgColor: '#ecfdf5'
+      color: '#10b981'
     },
     {
-      name: 'Project Clicks',
+      name: 'Clicks',
       value: stats.totalClicks,
       icon: MousePointer,
-      color: '#f59e0b',
-      bgColor: '#fffbeb'
+      color: '#f59e0b'
     },
     {
-      name: 'Email Captures',
+      name: 'Captures',
       value: stats.totalEmailCaptures,
       icon: Mail,
-      color: '#8b5cf6',
-      bgColor: '#f3e8ff'
+      color: '#ef4444'
     }
   ]
 
   return (
     <DashboardLayout>
-      <div style={{ maxWidth: '1200px' }}>
-        {/* Welcome Section */}
-        <div style={{ marginBottom: '32px' }}>
+      <div style={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        gap: '16px',
+        overflow: 'hidden'
+      }}>
+        {/* Welcome Section - Compact */}
+        <div style={{ 
+          backgroundColor: '#1a1a2e',
+          padding: '16px',
+          borderRadius: '8px',
+          border: '1px solid #7c3aed'
+        }}>
           <h2 style={{ 
-            fontSize: '28px', 
+            fontSize: '20px', 
             fontWeight: 'bold', 
-            color: '#111827',
-            marginBottom: '8px'
+            color: '#ffffff',
+            margin: '0 0 4px 0'
           }}>
             Welcome back, {session.user?.name || 'Developer'}! 👋
           </h2>
-          <p style={{ color: '#6b7280', fontSize: '16px' }}>
-            Here's what's happening with your developer portfolio today.
+          <p style={{ color: '#a1a1aa', fontSize: '14px', margin: 0 }}>
+            Here's your portfolio overview
           </p>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Grid - Compact */}
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '20px',
-          marginBottom: '32px'
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '12px'
         }}>
           {statCards.map((stat) => {
             const Icon = stat.icon
@@ -124,204 +121,252 @@ function DashboardContent() {
               <div
                 key={stat.name}
                 style={{
-                  backgroundColor: 'white',
-                  padding: '24px',
-                  borderRadius: '12px',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                  border: '1px solid #e5e7eb'
+                  backgroundColor: '#1a1a2e',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  border: '1px solid #7c3aed',
+                  textAlign: 'center'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <p style={{ 
-                      color: '#6b7280', 
-                      fontSize: '14px', 
-                      fontWeight: '500',
-                      marginBottom: '4px'
-                    }}>
-                      {stat.name}
-                    </p>
-                    <p style={{ 
-                      fontSize: '32px', 
-                      fontWeight: 'bold', 
-                      color: '#111827',
-                      margin: 0
-                    }}>
-                      {stat.value.toLocaleString()}
-                    </p>
-                  </div>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '12px',
-                    backgroundColor: stat.bgColor,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Icon style={{ height: '24px', width: '24px', color: stat.color }} />
-                  </div>
-                </div>
+                <Icon style={{ 
+                  height: '20px', 
+                  width: '20px', 
+                  color: stat.color,
+                  margin: '0 auto 8px auto',
+                  display: 'block'
+                }} />
+                <p style={{ 
+                  fontSize: '20px', 
+                  fontWeight: 'bold', 
+                  color: '#ffffff',
+                  margin: '0 0 4px 0'
+                }}>
+                  {stat.value.toLocaleString()}
+                </p>
+                <p style={{ 
+                  color: '#a1a1aa', 
+                  fontSize: '12px',
+                  margin: 0
+                }}>
+                  {stat.name}
+                </p>
               </div>
             )
           })}
         </div>
 
-        {/* Quick Actions */}
+        {/* Main Content Grid */}
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '24px'
+          gridTemplateColumns: '1fr 300px',
+          gap: '16px',
+          flex: 1,
+          minHeight: 0 // Important for flex children
         }}>
           {/* Recent Activity */}
           <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            border: '1px solid #e5e7eb'
+            backgroundColor: '#1a1a2e',
+            padding: '16px',
+            borderRadius: '8px',
+            border: '1px solid #7c3aed',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
             <h3 style={{ 
-              fontSize: '18px', 
+              fontSize: '16px', 
               fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
+              color: '#7c3aed',
+              margin: '0 0 12px 0',
               display: 'flex',
               alignItems: 'center'
             }}>
-              <TrendingUp style={{ height: '20px', width: '20px', marginRight: '8px' }} />
+              <TrendingUp style={{ height: '16px', width: '16px', marginRight: '8px' }} />
               Recent Activity
             </h3>
-            <div style={{ color: '#6b7280' }}>
-              <p style={{ marginBottom: '12px' }}>📊 12 profile views today</p>
-              <p style={{ marginBottom: '12px' }}>🖱️ 5 project clicks this week</p>
-              <p style={{ marginBottom: '12px' }}>📧 2 new email captures</p>
-              <p style={{ color: '#3b82f6', cursor: 'pointer' }}>
-                View detailed analytics →
-              </p>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                padding: '8px 0',
+                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
+              }}>
+                <span style={{ color: '#ffffff', fontSize: '14px' }}>Profile views today</span>
+                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>12</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                padding: '8px 0',
+                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
+              }}>
+                <span style={{ color: '#ffffff', fontSize: '14px' }}>Project clicks</span>
+                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>5</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                padding: '8px 0',
+                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
+              }}>
+                <span style={{ color: '#ffffff', fontSize: '14px' }}>Email captures</span>
+                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>2</span>
+              </div>
+              <button
+                onClick={() => router.push('/dashboard/analytics')}
+                style={{
+                  marginTop: 'auto',
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                  color: '#7c3aed',
+                  border: '1px solid rgba(124, 58, 237, 0.3)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                View Detailed Analytics →
+              </button>
             </div>
           </div>
 
           {/* Quick Actions */}
           <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            border: '1px solid #e5e7eb'
+            backgroundColor: '#1a1a2e',
+            padding: '16px',
+            borderRadius: '8px',
+            border: '1px solid #7c3aed',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
             <h3 style={{ 
-              fontSize: '18px', 
+              fontSize: '16px', 
               fontWeight: 'bold', 
-              color: '#111827',
-              marginBottom: '16px',
+              color: '#7c3aed',
+              margin: '0 0 12px 0',
               display: 'flex',
               alignItems: 'center'
             }}>
-              <Plus style={{ height: '20px', width: '20px', marginRight: '8px' }} />
+              <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
               Quick Actions
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button
                 onClick={() => router.push('/dashboard/projects/new')}
                 style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#3b82f6',
+                  padding: '10px 12px',
+                  backgroundColor: '#7c3aed',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  textAlign: 'left'
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
-                + Add New Project
+                <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
+                Add Project
               </button>
               <button
                 onClick={() => router.push('/dashboard/profile')}
                 style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                  color: '#7c3aed',
+                  border: '1px solid rgba(124, 58, 237, 0.3)',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  textAlign: 'left'
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
+                <Settings style={{ height: '16px', width: '16px', marginRight: '8px' }} />
                 Edit Profile
               </button>
               <button
                 onClick={() => router.push('/dashboard/analytics')}
                 style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                  color: '#7c3aed',
+                  border: '1px solid rgba(124, 58, 237, 0.3)',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  textAlign: 'left'
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
-                View Analytics
+                <BarChart3 style={{ height: '16px', width: '16px', marginRight: '8px' }} />
+                Analytics
+              </button>
+              <button
+                onClick={() => window.open(`/profile/${session.user?.username || 'user'}`, '_blank')}
+                style={{
+                  padding: '10px 12px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <ExternalLink style={{ height: '16px', width: '16px', marginRight: '8px' }} />
+                View Profile
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Getting Started */}
-        <div style={{
-          backgroundColor: 'white',
-          padding: '32px',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb',
-          marginTop: '32px'
-        }}>
-          <h3 style={{ 
-            fontSize: '20px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            marginBottom: '16px'
-          }}>
-            🚀 Next Steps to Complete Your Profile
-          </h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '16px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px' }}>
-              <div style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: stats.totalProjects > 0 ? '#10b981' : '#d1d5db',
-                marginRight: '12px'
-              }} />
-              <span style={{ color: '#374151' }}>Add your first project</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px' }}>
-              <div style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: '#d1d5db',
-                marginRight: '12px'
-              }} />
-              <span style={{ color: '#374151' }}>Customize your profile</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px' }}>
-              <div style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: '#d1d5db',
-                marginRight: '12px'
-              }} />
-              <span style={{ color: '#374151' }}>Share your profile link</span>
+            {/* Progress Section */}
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(124, 58, 237, 0.3)' }}>
+              <h4 style={{ 
+                fontSize: '14px', 
+                fontWeight: 'bold', 
+                color: '#ffffff',
+                margin: '0 0 8px 0'
+              }}>
+                Profile Progress
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: stats.totalProjects > 0 ? '#10b981' : '#6b7280',
+                    marginRight: '8px'
+                  }} />
+                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Add projects</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#6b7280',
+                    marginRight: '8px'
+                  }} />
+                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Customize profile</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#6b7280',
+                    marginRight: '8px'
+                  }} />
+                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Share profile</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
