@@ -18,6 +18,59 @@ import {
   ExternalLink
 } from 'lucide-react'
 
+
+function OnboardingCheck({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true)
+
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      if (status === 'authenticated' && session?.user?.id) {
+        try {
+          const response = await fetch('/api/auth/status')
+          const result = await response.json()
+          
+          if (result.authenticated && result.user) {
+            // NEW: Check if onboarding is completed
+            if (!result.user.onboardingCompleted) {
+              router.push('/onboarding')
+              return
+            }
+          }
+        } catch (error) {
+          console.error('Error checking onboarding status:', error)
+        }
+      }
+      setIsCheckingOnboarding(false)
+    }
+
+    checkOnboardingStatus()
+  }, [status, session, router])
+
+  if (status === 'unauthenticated') {
+    router.push('/auth/login')
+    return null
+  }
+
+  if (status === 'loading' || isCheckingOnboarding) {
+    return (
+      <DashboardLayout>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          height: '100%'
+        }}>
+          <div style={{ color: '#ffffff' }}>Loading...</div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  return children
+}
+
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -378,7 +431,9 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <SessionProvider>
+    <OnboardingCheck>
       <DashboardContent />
-    </SessionProvider>
+    </OnboardingCheck>
+  </SessionProvider>
   )
 }

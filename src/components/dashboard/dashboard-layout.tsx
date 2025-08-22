@@ -28,6 +28,7 @@ const navigation = [
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Profile', href: '/dashboard/profile', icon: User },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  
 ]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {

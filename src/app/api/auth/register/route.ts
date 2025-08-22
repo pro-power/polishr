@@ -63,44 +63,41 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const saltRounds = 12
     const passwordHash = await bcrypt.hash(password, saltRounds)
 
-    // Generate email verification token
-    const verificationToken = generateEmailToken()
-
-    // Create user
+    // NEW: For onboarding flow, we skip email verification
+    // Create user with portfolio fields and mark for onboarding
     const user = await db.user.create({
       data: {
         email: normalizedEmail,
         passwordHash,
         username: normalizedUsername,
         displayName,
-        emailVerificationToken: verificationToken,
-        // User starts unverified
-        emailVerified: null,
+        // NEW: Skip email verification for onboarding flow
+        emailVerified: new Date(), // Auto-verify for onboarding flow
+        emailVerificationToken: null, // No verification needed
+        // NEW: Portfolio system defaults
+        onboardingCompleted: false,
+        templateId: 'minimal',
+        themeId: 'ocean',
+        isPublic: false, // Keep private until onboarding is complete
+        lookingForWork: true,
       },
     })
 
-    // Send verification email
-    const emailResult = await sendVerificationEmail(
-      user.email,
-      user.displayName || user.email, // Fallback to email if displayName is null
-      verificationToken
-    )
-
-    if (!emailResult.success) {
-      console.error('Failed to send verification email:', emailResult.error)
-      
-      // Still return success but mention email issue
-      return createResponse({
-        message: 'Account created successfully, but failed to send verification email. Please request a new verification email.',
-        userId: user.id,
-        emailSent: false,
-      })
-    }
-
+    // NEW: Return success with onboarding flag (no email sending)
     return createResponse({
-      message: 'Account created successfully! Please check your email to verify your account.',
+      message: 'Account created successfully! Let\'s set up your portfolio.',
       userId: user.id,
-      emailSent: true,
+      emailSent: false, // No email sent in onboarding flow
+      // NEW: Always require onboarding for new users
+      requiresOnboarding: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+        emailVerified: !!user.emailVerified, // true since we auto-verified
+        onboardingCompleted: user.onboardingCompleted, // false
+      },
     })
 
   } catch (error) {

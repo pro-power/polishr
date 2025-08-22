@@ -1,4 +1,5 @@
-// prisma/schema.prisma
+// prisma/schema.prisma - REPLACE your existing schema with this complete version
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -24,6 +25,15 @@ model User {
   githubUrl         String?
   linkedinUrl       String?
   
+  // NEW: Portfolio/job-focused fields
+  onboardingCompleted Boolean @default(false)
+  templateId        String   @default("minimal")
+  themeId          String   @default("ocean")
+  jobTitle         String?
+  location         String?
+  resumeUrl        String?
+  lookingForWork   Boolean  @default(true)
+  
   // Profile customization
   themeColor        String   @default("blue")
   isPublic          Boolean  @default(true)
@@ -46,6 +56,12 @@ model User {
   profileViews      ProfileView[]
   emailCaptures     EmailCapture[]
   resetTokens       PasswordResetToken[]
+  
+  // NEW: Portfolio relations
+  skills            UserSkill[]
+  experience        UserExperience[]
+  portfolioConfig   UserPortfolioConfig?
+  templateAnalytics TemplateAnalytics[]
   
   @@map("users")
 }
@@ -102,6 +118,60 @@ model ProjectImage {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
   @@map("project_images")
+}
+
+// NEW: User skills model
+model UserSkill {
+  id        String   @id @default(cuid())
+  userId    String
+  skillName String
+  skillLevel SkillLevel @default(INTERMEDIATE)
+  category  String?  // 'frontend', 'backend', 'database', 'tools', 'soft-skills'
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, skillName])
+  @@map("user_skills")
+}
+
+// NEW: User experience/education model
+model UserExperience {
+  id           String   @id @default(cuid())
+  userId       String
+  type         ExperienceType
+  title        String   // Job title or degree
+  organization String   // Company or school
+  description  String?
+  startDate    DateTime?
+  endDate      DateTime?
+  isCurrent    Boolean  @default(false)
+  location     String?
+  position     Int      @default(0)
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_experience")
+}
+
+// NEW: Portfolio configuration model
+model UserPortfolioConfig {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  templateId        String   @default("minimal")
+  themeId          String   @default("ocean")
+  customCss        String?
+  sectionOrder     Json?    // Array of section names in order
+  sectionVisibility Json?   // Object with section: boolean visibility
+  customizations   Json?    // Template-specific customizations
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_portfolio_config")
 }
 
 // Email captures for project waitlists/newsletters
@@ -201,6 +271,20 @@ model UserAnalytics {
   @@map("user_analytics")
 }
 
+// NEW: Template analytics model
+model TemplateAnalytics {
+  id         String   @id @default(cuid())
+  templateId String
+  themeId    String
+  userId     String?
+  action     String   // 'selected', 'published', 'viewed'
+  createdAt  DateTime @default(now())
+  
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("template_analytics")
+}
+
 // Enums
 enum PlanType {
   FREE
@@ -222,4 +306,20 @@ enum ProjectStatus {
   LIVE
   ARCHIVED
   COMING_SOON
+}
+
+// NEW: Skill level enum
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// NEW: Experience type enum
+enum ExperienceType {
+  WORK
+  EDUCATION
+  PROJECT
+  VOLUNTEER
 }

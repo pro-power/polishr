@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2, CheckCircle, Mail } from 'lucide-react'
+import { signIn } from 'next-auth/react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,17 +59,43 @@ export default function RegisterPage() {
       const result = await response.json()
 
       if (response.ok) {
-        setRegistrationComplete(true)
-        setRegisteredEmail(data.email)
-        
-        if (result.emailSent) {
-          toast.success('Account created!', {
-            description: 'Please check your email to verify your account.',
+        // NEW: Check if user needs onboarding
+        if (result.requiresOnboarding) {
+          // Auto-sign them in first
+          const signInResult = await signIn('credentials', {
+            email: data.email,
+            password: data.password,
+            redirect: false,
           })
+
+          if (signInResult?.ok) {
+            // Redirect to onboarding instead of email verification
+            toast.success('Account created!', {
+              description: 'Let\'s set up your portfolio.',
+            })
+            router.push('/onboarding')
+          } else {
+            // Fallback to email verification if sign-in fails
+            setRegistrationComplete(true)
+            setRegisteredEmail(data.email)
+            toast.success('Account created!', {
+              description: 'Please check your email to verify your account.',
+            })
+          }
         } else {
-          toast.warning('Account created but email not sent', {
-            description: 'You may need to request a verification email.',
-          })
+          // Existing flow for email verification
+          setRegistrationComplete(true)
+          setRegisteredEmail(data.email)
+          
+          if (result.emailSent) {
+            toast.success('Account created!', {
+              description: 'Please check your email to verify your account.',
+            })
+          } else {
+            toast.warning('Account created but email not sent', {
+              description: 'You may need to request a verification email.',
+            })
+          }
         }
       } else {
         toast.error(result.error || 'Failed to create account')
@@ -364,7 +391,7 @@ export default function RegisterPage() {
         {/* Additional Information */}
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-500">
-            By creating an account, you'll be able to showcase your projects and build a professional developer profile.
+            By creating an account, you'll be able to showcase your projects and build a professional developer portfolio.
           </p>
         </div>
       </div>
