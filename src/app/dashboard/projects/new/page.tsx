@@ -1,4 +1,4 @@
-// src/app/dashboard/projects/new/page.tsx
+// src/app/dashboard/projects/new/page.tsx - Complete implementation with API integration
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Lightbulb, Rocket, Zap, Image as ImageIcon, Link2, Code, Settings } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 
@@ -13,6 +14,9 @@ export default function CreateProjectPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('basic')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // FIXED: Initialize all form fields with empty strings instead of undefined
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -60,13 +64,96 @@ export default function CreateProjectPage() {
     return null
   }
 
+  // FIXED: Ensure values are never undefined
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => ({ 
+      ...prev, 
+      [field]: value === null || value === undefined ? '' : value 
+    }))
   }
 
+  // FIXED: Implement actual project creation with API call
   const handleSubmit = async () => {
-    console.log('Creating project:', formData)
-    // TODO: Implement project creation
+    if (!formData.title.trim() || !formData.description.trim()) {
+      toast.error('Missing required fields', {
+        description: 'Please fill in the project title and description.'
+      })
+      return
+    }
+
+    if (formData.techStack.length === 0) {
+      toast.error('Tech stack required', {
+        description: 'Please add at least one technology to your tech stack.'
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      // Prepare project data for API
+      const projectData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category || null,
+        techStack: formData.techStack,
+        demoUrl: formData.demoUrl.trim() || null,
+        repoUrl: formData.repoUrl.trim() || null,
+        status: formData.status,
+        featured: formData.featured,
+        isPublic: formData.status !== 'DRAFT', // Public if not draft
+        ctaType: formData.ctaType,
+        ctaUrl: formData.ctaUrl.trim() || null,
+        ctaText: formData.ctaText.trim() || null,
+      }
+
+      console.log('Creating project with data:', projectData)
+
+      // Call the projects API
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(projectData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // Success! Show success toast and redirect
+        toast.success('Project created successfully!', {
+          description: 'Your project has been added to your portfolio.',
+        })
+
+        // Redirect to projects list after a short delay
+        setTimeout(() => {
+          router.push('/dashboard/projects')
+        }, 1000)
+
+      } else {
+        // Handle API errors
+        console.error('Project creation failed:', result)
+        
+        if (response.status === 403 && result.message?.includes('limit')) {
+          toast.error('Project limit reached', {
+            description: 'Upgrade to Pro for unlimited projects.',
+          })
+        } else {
+          toast.error('Failed to create project', {
+            description: result.message || 'Please try again.',
+          })
+        }
+      }
+
+    } catch (error) {
+      console.error('Project creation error:', error)
+      toast.error('Something went wrong', {
+        description: 'Please check your connection and try again.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const tabs = [
@@ -95,7 +182,7 @@ export default function CreateProjectPage() {
                 </label>
                 <input
                   type="text"
-                  value={formData.title}
+                  value={formData.title || ''} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('title', e.target.value)}
                   placeholder="My Awesome Project"
                   style={{
@@ -122,7 +209,7 @@ export default function CreateProjectPage() {
                   Category
                 </label>
                 <select
-                  value={formData.category}
+                  value={formData.category || ''} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('category', e.target.value)}
                   style={{
                     width: '100%',
@@ -138,46 +225,16 @@ export default function CreateProjectPage() {
                   <option value="web">Web Application</option>
                   <option value="mobile">Mobile App</option>
                   <option value="desktop">Desktop App</option>
-                  <option value="ai">AI/ML Project</option>
+                  <option value="api">API/Backend</option>
+                  <option value="ai">AI/Machine Learning</option>
                   <option value="tool">Developer Tool</option>
                   <option value="game">Game</option>
                   <option value="other">Other</option>
                 </select>
               </div>
-
-              {/* Image URL */}
-              <div>
-                <label style={{ 
-                  display: 'block', 
-                  fontSize: '13px', 
-                  fontWeight: '500', 
-                  color: '#ffffff',
-                  marginBottom: '6px'
-                }}>
-                  Project Image URL
-                </label>
-                <input
-                  type="url"
-                  value={formData.imageUrl}
-                  onChange={(e) => handleInputChange('imageUrl', e.target.value)}
-                  placeholder="https://example.com/project-image.png"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: '1px solid #7c3aed',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    backgroundColor: '#0f0f23',
-                    color: '#ffffff'
-                  }}
-                />
-                <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>
-                  Optional: Add a screenshot or preview image
-                </p>
-              </div>
             </div>
 
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Description */}
               <div>
                 <label style={{ 
@@ -190,7 +247,7 @@ export default function CreateProjectPage() {
                   Description *
                 </label>
                 <textarea
-                  value={formData.description}
+                  value={formData.description || ''} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   placeholder="Describe your project, what it does, and what makes it special..."
                   rows={10}
@@ -207,7 +264,7 @@ export default function CreateProjectPage() {
                   }}
                 />
                 <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>
-                  {formData.description.length}/500 characters
+                  {(formData.description || '').length}/500 characters
                 </p>
               </div>
             </div>
@@ -231,7 +288,7 @@ export default function CreateProjectPage() {
                 </label>
                 <input
                   type="url"
-                  value={formData.demoUrl}
+                  value={formData.demoUrl || ''} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('demoUrl', e.target.value)}
                   placeholder="https://my-project-demo.com"
                   style={{
@@ -259,7 +316,7 @@ export default function CreateProjectPage() {
                 </label>
                 <input
                   type="url"
-                  value={formData.repoUrl}
+                  value={formData.repoUrl || ''} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('repoUrl', e.target.value)}
                   placeholder="https://github.com/username/project"
                   style={{
@@ -286,7 +343,7 @@ export default function CreateProjectPage() {
                   Call-to-Action Type
                 </label>
                 <select
-                  value={formData.ctaType}
+                  value={formData.ctaType || 'DEMO'} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('ctaType', e.target.value)}
                   style={{
                     width: '100%',
@@ -299,16 +356,18 @@ export default function CreateProjectPage() {
                   }}
                 >
                   <option value="DEMO">Demo Link</option>
-                  <option value="EMAIL">Email Capture</option>
+                  <option value="GITHUB">GitHub Repository</option>
+                  <option value="WAITLIST">Email Waitlist</option>
+                  <option value="BUY">Purchase Link</option>
+                  <option value="CONTACT">Contact Form</option>
                   <option value="CUSTOM">Custom Button</option>
-                  <option value="NONE">No CTA</option>
                 </select>
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Custom CTA URL */}
-              {formData.ctaType === 'CUSTOM' && (
+              {(formData.ctaType === 'CUSTOM' || formData.ctaType === 'BUY') && (
                 <div>
                   <label style={{ 
                     display: 'block', 
@@ -317,11 +376,11 @@ export default function CreateProjectPage() {
                     color: '#ffffff',
                     marginBottom: '6px'
                   }}>
-                    Custom CTA URL
+                    CTA URL
                   </label>
                   <input
                     type="url"
-                    value={formData.ctaUrl}
+                    value={formData.ctaUrl || ''} // FIXED: Ensure never undefined
                     onChange={(e) => handleInputChange('ctaUrl', e.target.value)}
                     placeholder="https://custom-action.com"
                     style={{
@@ -338,7 +397,7 @@ export default function CreateProjectPage() {
               )}
 
               {/* Custom CTA Text */}
-              {(formData.ctaType === 'CUSTOM' || formData.ctaType === 'EMAIL') && (
+              {(formData.ctaType === 'CUSTOM' || formData.ctaType === 'WAITLIST' || formData.ctaType === 'BUY') && (
                 <div>
                   <label style={{ 
                     display: 'block', 
@@ -351,9 +410,13 @@ export default function CreateProjectPage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.ctaText}
+                    value={formData.ctaText || ''} // FIXED: Ensure never undefined
                     onChange={(e) => handleInputChange('ctaText', e.target.value)}
-                    placeholder={formData.ctaType === 'EMAIL' ? 'Get Updates' : 'Custom Action'}
+                    placeholder={
+                      formData.ctaType === 'WAITLIST' ? 'Join Waitlist' :
+                      formData.ctaType === 'BUY' ? 'Buy Now' :
+                      'Custom Action'
+                    }
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -376,18 +439,18 @@ export default function CreateProjectPage() {
                   color: '#ffffff',
                   marginBottom: '6px'
                 }}>
-                  CTA Preview
+                  Button Preview
                 </label>
                 <div style={{
-                  padding: '16px',
-                  backgroundColor: '#0f0f23',
+                  padding: '10px 12px',
+                  border: '1px solid #333',
                   borderRadius: '6px',
-                  border: '1px solid #7c3aed'
+                  backgroundColor: '#1a1a2e'
                 }}>
-                  {formData.ctaType === 'DEMO' && formData.demoUrl && (
+                  {formData.ctaType === 'DEMO' && (
                     <button style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#7c3aed',
+                      padding: '6px 12px',
+                      backgroundColor: '#3b82f6',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
@@ -397,9 +460,22 @@ export default function CreateProjectPage() {
                       View Demo
                     </button>
                   )}
-                  {formData.ctaType === 'EMAIL' && (
+                  {formData.ctaType === 'GITHUB' && (
                     <button style={{
-                      padding: '8px 16px',
+                      padding: '6px 12px',
+                      backgroundColor: '#1f2937',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}>
+                      View Code
+                    </button>
+                  )}
+                  {formData.ctaType === 'WAITLIST' && (
+                    <button style={{
+                      padding: '6px 12px',
                       backgroundColor: '#10b981',
                       color: 'white',
                       border: 'none',
@@ -407,13 +483,26 @@ export default function CreateProjectPage() {
                       fontSize: '12px',
                       fontWeight: '500'
                     }}>
-                      {formData.ctaText || 'Get Updates'}
+                      {formData.ctaText || 'Join Waitlist'}
                     </button>
                   )}
-                  {formData.ctaType === 'CUSTOM' && formData.ctaUrl && (
+                  {formData.ctaType === 'BUY' && (
                     <button style={{
-                      padding: '8px 16px',
+                      padding: '6px 12px',
                       backgroundColor: '#f59e0b',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}>
+                      {formData.ctaText || 'Buy Now'}
+                    </button>
+                  )}
+                  {formData.ctaType === 'CUSTOM' && (
+                    <button style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#7c3aed',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
@@ -422,11 +511,6 @@ export default function CreateProjectPage() {
                     }}>
                       {formData.ctaText || 'Custom Action'}
                     </button>
-                  )}
-                  {formData.ctaType === 'NONE' && (
-                    <span style={{ color: '#a1a1aa', fontSize: '12px' }}>
-                      No call-to-action button
-                    </span>
                   )}
                 </div>
               </div>
@@ -447,11 +531,11 @@ export default function CreateProjectPage() {
                   color: '#ffffff',
                   marginBottom: '6px'
                 }}>
-                  Tech Stack
+                  Tech Stack *
                 </label>
                 <input
                   type="text"
-                  placeholder="React, Node.js, MongoDB (comma separated)"
+                  placeholder="Type and press Enter (e.g., React, Node.js, MongoDB)"
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -464,7 +548,7 @@ export default function CreateProjectPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ',') {
                       e.preventDefault()
-                      const value = e.currentTarget.value.trim()
+                      const value = e.currentTarget.value.trim().replace(/,$/, '') // Remove trailing comma
                       if (value && !formData.techStack.includes(value)) {
                         handleInputChange('techStack', [...formData.techStack, value])
                         e.currentTarget.value = ''
@@ -473,7 +557,7 @@ export default function CreateProjectPage() {
                   }}
                 />
                 <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>
-                  Press Enter or comma to add tags
+                  Press Enter or comma to add technologies
                 </p>
                 
                 {/* Tech Stack Tags */}
@@ -512,6 +596,11 @@ export default function CreateProjectPage() {
                     </span>
                   ))}
                 </div>
+                {formData.techStack.length === 0 && (
+                  <p style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>
+                    Please add at least one technology
+                  </p>
+                )}
               </div>
 
               {/* Project Status */}
@@ -526,7 +615,7 @@ export default function CreateProjectPage() {
                   Project Status
                 </label>
                 <select
-                  value={formData.status}
+                  value={formData.status || 'DRAFT'} // FIXED: Ensure never undefined
                   onChange={(e) => handleInputChange('status', e.target.value)}
                   style={{
                     width: '100%',
@@ -546,7 +635,7 @@ export default function CreateProjectPage() {
               </div>
             </div>
 
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Status Guide */}
               <div style={{
                 padding: '16px',
@@ -591,7 +680,10 @@ export default function CreateProjectPage() {
                         }}>
                           {item.status}
                         </div>
-                        <div style={{ color: '#a1a1aa', fontSize: '11px', lineHeight: '1.3' }}>
+                        <div style={{ 
+                          color: '#a1a1aa', 
+                          fontSize: '11px'
+                        }}>
                           {item.desc}
                         </div>
                       </div>
@@ -607,11 +699,12 @@ export default function CreateProjectPage() {
         return (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', height: '100%' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Featured Project */}
+              {/* Featured */}
               <div>
                 <label style={{ 
                   display: 'flex',
                   alignItems: 'center',
+                  gap: '8px',
                   fontSize: '13px', 
                   fontWeight: '500', 
                   color: '#ffffff',
@@ -619,109 +712,19 @@ export default function CreateProjectPage() {
                 }}>
                   <input
                     type="checkbox"
-                    checked={formData.featured}
+                    checked={formData.featured || false} // FIXED: Ensure never undefined
                     onChange={(e) => handleInputChange('featured', e.target.checked)}
-                    style={{ marginRight: '8px', width: '16px', height: '16px' }}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      accentColor: '#7c3aed'
+                    }}
                   />
                   Featured Project
                 </label>
                 <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>
-                  Featured projects appear first on your profile
+                  Featured projects appear at the top of your portfolio
                 </p>
-              </div>
-
-              {/* Project Visibility */}
-              <div>
-                <label style={{ 
-                  display: 'block', 
-                  fontSize: '13px', 
-                  fontWeight: '500', 
-                  color: '#ffffff',
-                  marginBottom: '6px'
-                }}>
-                  Visibility
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    fontSize: '12px', 
-                    color: '#ffffff',
-                    cursor: 'pointer'
-                  }}>
-                    <input
-                      type="radio"
-                      name="visibility"
-                      checked={formData.status !== 'DRAFT'}
-                      onChange={() => handleInputChange('status', 'LIVE')}
-                      style={{ marginRight: '8px' }}
-                    />
-                    Public - Visible on your profile
-                  </label>
-                  <label style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    fontSize: '12px', 
-                    color: '#ffffff',
-                    cursor: 'pointer'
-                  }}>
-                    <input
-                      type="radio"
-                      name="visibility"
-                      checked={formData.status === 'DRAFT'}
-                      onChange={() => handleInputChange('status', 'DRAFT')}
-                      style={{ marginRight: '8px' }}
-                    />
-                    Private - Only visible to you
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              {/* Project Tips */}
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#0f0f23',
-                borderRadius: '6px',
-                border: '1px solid #7c3aed'
-              }}>
-                <h4 style={{ 
-                  fontSize: '14px', 
-                  fontWeight: 'bold', 
-                  color: '#ffffff',
-                  marginBottom: '12px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}>
-                  <Lightbulb style={{ height: '14px', width: '14px', marginRight: '6px' }} />
-                  💡 Tips
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {[
-                    'Add both demo and GitHub links',
-                    'Use clear, descriptive titles',
-                    'Include relevant tech stack tags',
-                    'Write compelling descriptions',
-                    'Feature your best projects'
-                  ].map((tip, index) => (
-                    <div key={index} style={{ 
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '6px'
-                    }}>
-                      <div style={{
-                        width: '4px',
-                        height: '4px',
-                        borderRadius: '50%',
-                        backgroundColor: '#7c3aed',
-                        marginTop: '6px',
-                        flexShrink: 0
-                      }} />
-                      <span style={{ color: '#a1a1aa', fontSize: '12px', lineHeight: '1.4' }}>{tip}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -735,199 +738,132 @@ export default function CreateProjectPage() {
   return (
     <DashboardLayout>
       <div style={{ 
-        height: '100%', 
         display: 'flex', 
-        flexDirection: 'column',
-        gap: '16px',
-        overflow: 'hidden'
+        flexDirection: 'column', 
+        height: '100%',
+        padding: '16px',
+        gap: '16px'
       }}>
-        {/* Compact Header */}
-        <div style={{ 
-          backgroundColor: '#1a1a2e',
-          padding: '16px',
-          borderRadius: '8px',
-          border: '1px solid #7c3aed'
-        }}>
-          {/* Back Button */}
-          <div style={{ marginBottom: '12px' }}>
-            <Link 
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Link
               href="/dashboard/projects"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
+                padding: '8px',
+                borderRadius: '6px',
                 color: '#a1a1aa',
                 textDecoration: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                width: 'fit-content',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.1)'
-                e.currentTarget.style.color = '#ffffff'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.color = '#a1a1aa'
+                transition: 'color 0.2s'
               }}
             >
-              <ArrowLeft style={{ height: '14px', width: '14px', marginRight: '6px' }} />
-              Back to Projects
+              <ArrowLeft style={{ height: '20px', width: '20px' }} />
             </Link>
-          </div>
-
-          {/* Page Title */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            
             <div>
               <h1 style={{ 
-                fontSize: '20px', 
+                fontSize: '24px', 
                 fontWeight: 'bold', 
                 color: '#ffffff',
-                margin: '0 0 4px 0'
+                margin: '0'
               }}>
                 Create New Project
               </h1>
-              <p style={{ color: '#a1a1aa', fontSize: '14px', margin: 0 }}>
-                Add a new project to showcase in your developer portfolio
+              <p style={{ color: '#a1a1aa', fontSize: '14px', margin: '4px 0 0 0' }}>
+                Add a new project to your portfolio
               </p>
-            </div>
-
-            {/* Portfolio Stats */}
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff' }}>3</div>
-                <div style={{ fontSize: '11px', color: '#a1a1aa' }}>Projects</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff' }}>1</div>
-                <div style={{ fontSize: '11px', color: '#a1a1aa' }}>Featured</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff' }}>261</div>
-                <div style={{ fontSize: '11px', color: '#a1a1aa' }}>Total Clicks</div>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content with Tabs */}
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1a1a2e', padding: '4px', borderRadius: '8px' }}>
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '8px 12px',
+                  backgroundColor: isActive ? '#7c3aed' : 'transparent',
+                  color: isActive ? 'white' : '#a1a1aa',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Icon style={{ height: '16px', width: '16px' }} />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Tab Content */}
         <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '240px 1fr',
-          gap: '16px',
-          flex: 1,
-          minHeight: 0
+          flex: 1, 
+          backgroundColor: '#1a1a2e', 
+          borderRadius: '8px', 
+          padding: '16px',
+          overflow: 'auto'
         }}>
-          {/* Tabs Sidebar */}
-          <div style={{
-            backgroundColor: '#1a1a2e',
-            borderRadius: '8px',
-            border: '1px solid #7c3aed',
-            padding: '12px'
-          }}>
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
-              
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '12px',
-                    marginBottom: '8px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    backgroundColor: isActive ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
-                    color: isActive ? '#7c3aed' : '#a1a1aa',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    textAlign: 'left',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.1)'
-                      e.currentTarget.style.color = '#ffffff'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'transparent'
-                      e.currentTarget.style.color = '#a1a1aa'
-                    }
-                  }}
-                >
-                  <Icon style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                  {tab.label}
-                </button>
-              )
-            })}
-
-            {/* Motivation */}
-            <div style={{
-              backgroundColor: 'rgba(124, 58, 237, 0.1)',
-              padding: '12px',
-              borderRadius: '6px',
-              border: '1px solid rgba(124, 58, 237, 0.3)',
-              textAlign: 'center',
-              marginTop: '16px'
-            }}>
-              <div style={{ marginBottom: '6px' }}>
-                <span style={{ fontSize: '20px' }}>🚀</span>
-              </div>
-              <p style={{ 
-                fontSize: '12px', 
-                color: '#a1a1aa', 
-                lineHeight: '1.4',
-                margin: 0
-              }}>
-                Every great developer started with one project. Make yours count!
-              </p>
-            </div>
-          </div>
-
-          {/* Tab Content */}
-          <div style={{
-            backgroundColor: '#1a1a2e',
-            padding: '20px',
-            borderRadius: '8px',
-            border: '1px solid #7c3aed',
-            overflow: 'hidden'
-          }}>
-            {renderTabContent()}
-          </div>
+          {renderTabContent()}
         </div>
 
-        {/* Create Button */}
+        {/* Actions */}
         <button
           onClick={handleSubmit}
-          disabled={!formData.title || !formData.description}
+          disabled={!formData.title || !formData.description || formData.techStack.length === 0 || isSubmitting}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '12px 20px',
-            backgroundColor: (!formData.title || !formData.description) ? '#6b7280' : '#7c3aed',
+            padding: '12px 24px',
+            backgroundColor: (!formData.title || !formData.description || formData.techStack.length === 0 || isSubmitting) 
+              ? '#6b7280' : '#7c3aed',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            cursor: (!formData.title || !formData.description) ? 'not-allowed' : 'pointer',
+            cursor: (!formData.title || !formData.description || formData.techStack.length === 0 || isSubmitting) 
+              ? 'not-allowed' : 'pointer',
             fontWeight: '500',
             fontSize: '14px',
             width: 'fit-content',
-            alignSelf: 'flex-end'
+            alignSelf: 'flex-end',
+            display: 'flex',
+            alignItems: 'center',
+            opacity: isSubmitting ? 0.7 : 1
           }}
         >
-          <Rocket style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-          Create Project
+          {isSubmitting ? (
+            <>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                border: '2px solid #ffffff',
+                borderTop: '2px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginRight: '8px'
+              }} />
+              Creating...
+            </>
+          ) : (
+            <>
+              <Rocket style={{ height: '16px', width: '16px', marginRight: '8px' }} />
+              Create Project
+            </>
+          )}
         </button>
       </div>
     </DashboardLayout>

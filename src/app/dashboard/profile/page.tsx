@@ -579,7 +579,7 @@ function ProfileContent() {
 
             {/* Preview Button */}
             <button
-              onClick={() => window.open(`/profile/${session.user.username  || 'preview'}`, '_blank')}
+              onClick={() => window.open(`/${session?.user?.username || 'preview'}`, '_blank')}
               style={{
                 width: '100%',
                 display: 'flex',

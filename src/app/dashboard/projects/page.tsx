@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { SessionProvider, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
+import { toast } from 'sonner'
 import { 
   Plus, 
   ExternalLink, 
@@ -17,79 +18,170 @@ import {
   Calendar,
   Search,
   Star,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react'
+
+interface Project {
+  id: string
+  title: string
+  description: string | null
+  demoUrl: string | null
+  repoUrl: string | null
+  techStack: string[]
+  category: string | null
+  status: string
+  featured: boolean
+  isPublic: boolean
+  imageUrl: string | null
+  totalClicks: number
+  totalEmailCaptures: number
+  createdAt: string
+  updatedAt: string
+}
 
 function ProjectsContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  
+  // State management
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false)
 
-  // Mock data for demo
-  const [projects] = useState([
-    {
-      id: '1',
-      title: 'TaskFlow App',
-      description: 'A project management application with real-time collaboration features and team workspace.',
-      demoUrl: 'https://taskflow-demo.com',
-      repoUrl: 'https://github.com/demo/taskflow',
-      imageUrl: null,
-      techStack: ['Next.js', 'TypeScript', 'Prisma'],
-      category: 'web',
-      status: 'LIVE',
-      featured: true,
-      totalClicks: 127,
-      createdAt: '2024-01-15',
-    },
-    {
-      id: '2',
-      title: 'AI Content Generator',
-      description: 'Machine learning powered content generation tool with advanced AI capabilities.',
-      demoUrl: null,
-      repoUrl: 'https://github.com/demo/ai-content',
-      imageUrl: null,
-      techStack: ['Python', 'FastAPI', 'OpenAI'],
-      category: 'ai',
-      status: 'COMING_SOON',
-      featured: false,
-      totalClicks: 45,
-      createdAt: '2024-02-01',
-    },
-    {
-      id: '3',
-      title: 'Mobile Finance Tracker',
-      description: 'React Native app for personal finance tracking with beautiful charts and insights.',
-      demoUrl: null,
-      repoUrl: 'https://github.com/demo/finance-tracker',
-      imageUrl: null,
-      techStack: ['React Native', 'Firebase'],
-      category: 'mobile',
-      status: 'ARCHIVED',
-      featured: false,
-      totalClicks: 89,
-      createdAt: '2023-12-10',
-    }
-  ])
-
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/login')
+    } else if (status === 'authenticated') {
+      fetchProjects()
     }
   }, [status, router])
 
-  if (status === 'loading') {
+  // Fetch projects from API
+  const fetchProjects = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+      if (searchQuery) params.append('search', searchQuery)
+      if (selectedCategory) params.append('category', selectedCategory)
+      if (selectedStatus) params.append('status', selectedStatus)
+      if (showFeaturedOnly) params.append('featured', 'true')
+      
+      const response = await fetch(`/api/projects?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch projects')
+      }
+
+      const data = await response.json()
+      setProjects(data.projects || [])
+
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+      setError('Failed to load projects')
+      toast.error('Failed to load projects', {
+        description: 'Please try again or refresh the page.'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Refresh projects when filters change
+  useEffect(() => {
+    if (status === 'authenticated') {
+      const timeoutId = setTimeout(fetchProjects, 300) // Debounce search
+      return () => clearTimeout(timeoutId)
+    }
+  }, [searchQuery, selectedCategory, selectedStatus, showFeaturedOnly, status])
+
+  const handleDeleteProject = async (id: string, title: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`
+    )
+    
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        toast.success('Project deleted successfully')
+        // Remove project from local state
+        setProjects(prev => prev.filter(p => p.id !== id))
+      } else {
+        throw new Error('Failed to delete project')
+      }
+    } catch (error) {
+      console.error('Delete error:', error)
+      toast.error('Failed to delete project')
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'LIVE': return '#10b981'
+      case 'DRAFT': return '#f59e0b'
+      case 'COMING_SOON': return '#3b82f6'
+      case 'ARCHIVED': return '#6b7280'
+      default: return '#6b7280'
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'LIVE': return 'Live'
+      case 'DRAFT': return 'Draft'
+      case 'COMING_SOON': return 'Coming Soon'
+      case 'ARCHIVED': return 'Archived'
+      default: return status
+    }
+  }
+
+  const filteredProjects = projects.filter(project => {
+    if (searchQuery && !project.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !(project.description?.toLowerCase().includes(searchQuery.toLowerCase()))) {
+      return false
+    }
+    if (selectedCategory && project.category !== selectedCategory) return false
+    if (selectedStatus && project.status !== selectedStatus) return false
+    if (showFeaturedOnly && !project.featured) return false
+    return true
+  })
+
+  if (status === 'loading' || loading) {
     return (
       <DashboardLayout>
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          height: '100%'
+          height: '400px'
         }}>
-          <div style={{ color: '#ffffff' }}>Loading...</div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            color: '#ffffff'
+          }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              border: '2px solid #e5e7eb',
+              borderTop: '2px solid #3b82f6',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} />
+            Loading projects...
+          </div>
         </div>
       </DashboardLayout>
     )
@@ -99,184 +191,117 @@ function ProjectsContent() {
     return null
   }
 
-  const handleDeleteProject = async (id: string, title: string) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${title}"? This action cannot be undone.`
-    )
-    
-    if (confirmed) {
-      console.log('Delete project:', id)
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'LIVE': return { bg: 'rgba(16, 185, 129, 0.2)', text: '#10b981', border: 'rgba(16, 185, 129, 0.3)' }
-      case 'DRAFT': return { bg: 'rgba(245, 158, 11, 0.2)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' }
-      case 'COMING_SOON': return { bg: 'rgba(59, 130, 246, 0.2)', text: '#3b82f6', border: 'rgba(59, 130, 246, 0.3)' }
-      case 'ARCHIVED': return { bg: 'rgba(107, 114, 128, 0.2)', text: '#6b7280', border: 'rgba(107, 114, 128, 0.3)' }
-      default: return { bg: 'rgba(107, 114, 128, 0.2)', text: '#6b7280', border: 'rgba(107, 114, 128, 0.3)' }
-    }
-  }
-
-  const getStatusLabel = (status: string) => {
-    const statusMap: { [key: string]: string } = {
-      'LIVE': 'Live',
-      'DRAFT': 'Draft',
-      'COMING_SOON': 'Coming Soon',
-      'ARCHIVED': 'Archived'
-    }
-    return statusMap[status] || status
-  }
-
-  const stats = {
-    total: projects.length,
-    live: projects.filter(p => p.status === 'LIVE').length,
-    draft: projects.filter(p => p.status === 'DRAFT').length,
-    featured: projects.filter(p => p.featured).length,
-    totalClicks: projects.reduce((sum, p) => sum + (p.totalClicks || 0), 0),
-  }
-
   return (
     <DashboardLayout>
       <div style={{ 
-        height: '100%', 
         display: 'flex', 
-        flexDirection: 'column',
-        gap: '16px',
-        overflow: 'hidden'
+        flexDirection: 'column', 
+        height: '100%',
+        padding: '16px',
+        gap: '16px'
       }}>
-        {/* Compact Header */}
+        {/* Header */}
         <div style={{ 
-          backgroundColor: '#1a1a2e',
-          padding: '16px',
-          borderRadius: '8px',
-          border: '1px solid #7c3aed',
-          display: 'flex',
+          display: 'flex', 
+          alignItems: 'center', 
           justifyContent: 'space-between',
-          alignItems: 'center'
+          flexWrap: 'wrap',
+          gap: '16px'
         }}>
           <div>
             <h1 style={{ 
-              fontSize: '20px', 
+              fontSize: '24px', 
               fontWeight: 'bold', 
               color: '#ffffff',
-              margin: '0 0 4px 0'
+              margin: '0'
             }}>
               My Projects
             </h1>
-            <p style={{ color: '#a1a1aa', fontSize: '14px', margin: 0 }}>
-              Manage and showcase your development projects
+            <p style={{ color: '#a1a1aa', fontSize: '14px', margin: '4px 0 0 0' }}>
+              Manage and showcase your work
             </p>
           </div>
-          <button
-            onClick={() => router.push('/dashboard/projects/new')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '10px 16px',
-              backgroundColor: '#7c3aed',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '500',
-              fontSize: '14px'
-            }}
-          >
-            <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-            Add Project
-          </button>
-        </div>
-
-        {/* Compact Stats Grid - 5 in a row */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(5, 1fr)',
-          gap: '12px'
-        }}>
-          {[
-            { name: 'Total', value: stats.total, icon: ImageIcon, color: '#7c3aed' },
-            { name: 'Live', value: stats.live, icon: Eye, color: '#10b981' },
-            { name: 'Draft', value: stats.draft, icon: Edit, color: '#f59e0b' },
-            { name: 'Featured', value: stats.featured, icon: Star, color: '#ef4444' },
-            { name: 'Clicks', value: stats.totalClicks, icon: MousePointer, color: '#3b82f6' },
-          ].map((stat) => {
-            const Icon = stat.icon
-            return (
-              <div
-                key={stat.name}
-                style={{
-                  backgroundColor: '#1a1a2e',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: '1px solid #7c3aed',
-                  textAlign: 'center'
-                }}
-              >
-                <Icon style={{ 
-                  height: '16px', 
-                  width: '16px', 
-                  color: stat.color,
-                  margin: '0 auto 6px auto',
-                  display: 'block'
-                }} />
-                <p style={{ 
-                  fontSize: '18px', 
-                  fontWeight: 'bold', 
-                  color: '#ffffff',
-                  margin: '0 0 2px 0'
-                }}>
-                  {stat.value}
-                </p>
-                <p style={{ 
-                  color: '#a1a1aa', 
-                  fontSize: '12px',
-                  margin: 0
-                }}>
-                  {stat.name}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Compact Filters */}
-        <div style={{ 
-          backgroundColor: '#1a1a2e',
-          padding: '12px',
-          borderRadius: '8px',
-          border: '1px solid #7c3aed',
-          display: 'flex',
-          gap: '12px',
-          alignItems: 'center'
-        }}>
-          {/* Search */}
-          <div style={{ position: 'relative', flex: 1, maxWidth: '250px' }}>
-            <Search style={{ 
-              position: 'absolute', 
-              left: '10px', 
-              top: '50%', 
-              transform: 'translateY(-50%)', 
-              height: '14px', 
-              width: '14px', 
-              color: '#a1a1aa' 
-            }} />
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+          
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button
+              onClick={fetchProjects}
               style={{
-                width: '100%',
-                padding: '8px 8px 8px 32px',
+                padding: '8px 16px',
+                backgroundColor: 'transparent',
                 border: '1px solid #7c3aed',
                 borderRadius: '6px',
+                color: '#7c3aed',
+                cursor: 'pointer',
                 fontSize: '14px',
-                backgroundColor: '#0f0f23',
-                color: '#ffffff'
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
-            />
+            >
+              <RefreshCw style={{ height: '16px', width: '16px' }} />
+              Refresh
+            </button>
+            
+            <button
+              onClick={() => router.push('/dashboard/projects/new')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#7c3aed',
+                border: 'none',
+                borderRadius: '6px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Plus style={{ height: '16px', width: '16px' }} />
+              New Project
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '12px',
+          padding: '16px',
+          backgroundColor: '#1a1a2e',
+          borderRadius: '8px'
+        }}>
+          {/* Search */}
+          <div>
+            <div style={{ position: 'relative' }}>
+              <Search style={{
+                position: 'absolute',
+                left: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                height: '16px',
+                width: '16px',
+                color: '#a1a1aa'
+              }} />
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 36px',
+                  border: '1px solid #333',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  backgroundColor: '#0f0f23',
+                  color: '#ffffff'
+                }}
+              />
+            </div>
           </div>
 
           {/* Category Filter */}
@@ -284,20 +309,23 @@ function ProjectsContent() {
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             style={{
-              padding: '8px 10px',
-              border: '1px solid #7c3aed',
+              padding: '8px 12px',
+              border: '1px solid #333',
               borderRadius: '6px',
               fontSize: '14px',
               backgroundColor: '#0f0f23',
-              color: '#ffffff',
-              minWidth: '120px'
+              color: '#ffffff'
             }}
           >
             <option value="">All Categories</option>
-            <option value="web">Web App</option>
+            <option value="web">Web Application</option>
             <option value="mobile">Mobile App</option>
-            <option value="ai">AI/ML</option>
-            <option value="tool">Tool</option>
+            <option value="desktop">Desktop App</option>
+            <option value="api">API/Backend</option>
+            <option value="ai">AI/Machine Learning</option>
+            <option value="tool">Developer Tool</option>
+            <option value="game">Game</option>
+            <option value="other">Other</option>
           </select>
 
           {/* Status Filter */}
@@ -305,360 +333,319 @@ function ProjectsContent() {
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             style={{
-              padding: '8px 10px',
-              border: '1px solid #7c3aed',
+              padding: '8px 12px',
+              border: '1px solid #333',
               borderRadius: '6px',
               fontSize: '14px',
               backgroundColor: '#0f0f23',
-              color: '#ffffff',
-              minWidth: '100px'
+              color: '#ffffff'
             }}
           >
-            <option value="">All Status</option>
-            <option value="LIVE">Live</option>
+            <option value="">All Statuses</option>
             <option value="DRAFT">Draft</option>
+            <option value="LIVE">Live</option>
             <option value="COMING_SOON">Coming Soon</option>
             <option value="ARCHIVED">Archived</option>
           </select>
 
           {/* Featured Filter */}
-          <button
-            onClick={() => setShowFeaturedOnly(!showFeaturedOnly)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '8px 12px',
-              backgroundColor: showFeaturedOnly ? '#7c3aed' : 'transparent',
-              color: showFeaturedOnly ? 'white' : '#a1a1aa',
-              border: '1px solid #7c3aed',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '500',
-              fontSize: '14px'
-            }}
-          >
-            <Star style={{ height: '14px', width: '14px', marginRight: '6px' }} />
-            Featured
-          </button>
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            color: '#ffffff',
+            cursor: 'pointer'
+          }}>
+            <input
+              type="checkbox"
+              checked={showFeaturedOnly}
+              onChange={(e) => setShowFeaturedOnly(e.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                accentColor: '#7c3aed'
+              }}
+            />
+            Featured only
+          </label>
         </div>
+
+        {/* Error State */}
+        {error && (
+          <div style={{
+            padding: '16px',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '8px',
+            color: '#ef4444'
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Projects Grid */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {projects.length === 0 ? (
+          {filteredProjects.length > 0 ? (
             <div style={{
-              backgroundColor: '#1a1a2e',
-              padding: '40px 30px',
-              borderRadius: '8px',
-              border: '1px solid #7c3aed',
-              textAlign: 'center'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+              gap: '20px'
             }}>
-              <ImageIcon style={{ height: '32px', width: '32px', color: '#a1a1aa', margin: '0 auto 12px auto' }} />
-              <h3 style={{ 
-                fontSize: '16px', 
-                fontWeight: '600', 
-                color: '#ffffff',
-                marginBottom: '8px'
-              }}>
-                No projects yet
-              </h3>
-              <p style={{ color: '#a1a1aa', marginBottom: '16px', fontSize: '14px' }}>
-                Start building your portfolio by adding your first project.
-              </p>
-              <button
-                onClick={() => router.push('/dashboard/projects/new')}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#7c3aed',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  margin: '0 auto',
-                  fontSize: '14px'
-                }}
-              >
-                <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                Add Your First Project
-              </button>
-            </div>
-          ) : (
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: '16px'
-            }}>
-              {projects.map((project) => {
-                const statusStyle = getStatusColor(project.status)
-                
-                return (
-                  <div
-                    key={project.id}
-                    style={{
-                      backgroundColor: '#1a1a2e',
-                      borderRadius: '8px',
-                      border: '1px solid #7c3aed',
-                      overflow: 'hidden',
-                      transition: 'transform 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                    }}
-                  >
-                    {/* Compact Project Image */}
+              {filteredProjects.map((project) => (
+                <div
+                  key={project.id}
+                  style={{
+                    backgroundColor: '#1a1a2e',
+                    border: '1px solid #333',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    position: 'relative'
+                  }}
+                >
+                  {/* Featured Badge */}
+                  {project.featured && (
                     <div style={{
-                      aspectRatio: '16/8',
-                      backgroundColor: '#0f0f23',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      borderBottom: '1px solid #7c3aed'
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      padding: '2px 6px',
+                      backgroundColor: '#f59e0b',
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: '500'
                     }}>
-                      {project.imageUrl ? (
-                        <img 
-                          src={project.imageUrl} 
-                          alt={project.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center' 
-                        }}>
-                          <ImageIcon style={{ height: '20px', width: '20px', color: '#7c3aed' }} />
-                        </div>
-                      )}
-                      
-                      {/* Status Badge */}
-                      <div style={{ position: 'absolute', top: '8px', left: '8px' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '10px',
-                          fontWeight: '500',
-                          backgroundColor: statusStyle.bg,
-                          color: statusStyle.text,
-                          border: `1px solid ${statusStyle.border}`
-                        }}>
-                          {getStatusLabel(project.status)}
-                        </span>
-                      </div>
+                      <Star style={{ height: '10px', width: '10px', marginRight: '2px' }} />
+                      Featured
+                    </div>
+                  )}
 
-                      {/* Featured Badge */}
-                      {project.featured && (
-                        <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
+                  {/* Project Image Placeholder */}
+                  <div style={{
+                    width: '100%',
+                    height: '120px',
+                    backgroundColor: '#0f0f23',
+                    border: '1px solid #333',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    {project.imageUrl ? (
+                      <img 
+                        src={project.imageUrl} 
+                        alt={project.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px' }}
+                      />
+                    ) : (
+                      <ImageIcon style={{ height: '32px', width: '32px', color: '#a1a1aa' }} />
+                    )}
+                  </div>
+
+                  {/* Project Info */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <h3 style={{
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        color: '#ffffff',
+                        margin: 0,
+                        flex: 1
+                      }}>
+                        {project.title}
+                      </h3>
+                      
+                      <span style={{
+                        padding: '2px 6px',
+                        backgroundColor: getStatusColor(project.status),
+                        color: 'white',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: '500'
+                      }}>
+                        {getStatusLabel(project.status)}
+                      </span>
+                    </div>
+
+                    <p style={{
+                      color: '#a1a1aa',
+                      fontSize: '13px',
+                      margin: '0 0 12px 0',
+                      lineHeight: '1.4',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {project.description || 'No description provided'}
+                    </p>
+
+                    {/* Tech Stack */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '12px' }}>
+                      {project.techStack.slice(0, 3).map((tech, index) => (
+                        <span
+                          key={index}
+                          style={{
                             padding: '2px 6px',
+                            backgroundColor: 'rgba(124, 58, 237, 0.2)',
+                            color: '#7c3aed',
                             borderRadius: '4px',
                             fontSize: '10px',
-                            fontWeight: '500',
-                            backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                            color: '#f59e0b',
-                            border: '1px solid rgba(245, 158, 11, 0.3)'
-                          }}>
-                            <Star style={{ height: '8px', width: '8px', marginRight: '2px' }} />
-                            Featured
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Actions Menu */}
-                      <div style={{ position: 'absolute', bottom: '6px', right: '6px' }}>
-                        <div style={{ 
-                          display: 'flex', 
-                          gap: '4px'
+                            fontWeight: '500'
+                          }}
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                      {project.techStack.length > 3 && (
+                        <span style={{
+                          padding: '2px 6px',
+                          color: '#a1a1aa',
+                          fontSize: '10px'
                         }}>
-                          <button
-                            onClick={() => router.push(`/dashboard/projects/${project.id}/edit`)}
-                            style={{
-                              padding: '4px',
-                              backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                              border: '1px solid #7c3aed',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              backdropFilter: 'blur(4px)'
-                            }}
-                            title="Edit project"
-                          >
-                            <Edit style={{ height: '12px', width: '12px', color: '#7c3aed' }} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProject(project.id, project.title)}
-                            style={{
-                              padding: '4px',
-                              backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                              border: '1px solid #ef4444',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              backdropFilter: 'blur(4px)'
-                            }}
-                            title="Delete project"
-                          >
-                            <Trash2 style={{ height: '12px', width: '12px', color: '#ef4444' }} />
-                          </button>
-                        </div>
+                          +{project.techStack.length - 3} more
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Eye style={{ height: '12px', width: '12px', color: '#a1a1aa' }} />
+                        <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
+                          {project.totalClicks} clicks
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar style={{ height: '12px', width: '12px', color: '#a1a1aa' }} />
+                        <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
+                          {new Date(project.createdAt).toLocaleDateString()}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Compact Project Content */}
-                    <div style={{ padding: '12px' }}>
-                      {/* Title and Category */}
-                      <div style={{ marginBottom: '6px' }}>
-                        <h3 style={{ 
-                          fontSize: '14px', 
-                          fontWeight: '600',
-                          color: '#ffffff',
-                          marginBottom: '2px',
-                          lineHeight: '1.3'
-                        }}>
-                          {project.title}
-                        </h3>
-                        {project.category && (
-                          <p style={{ fontSize: '11px', color: '#a1a1aa' }}>
-                            {project.category}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Description */}
-                      {project.description && (
-                        <p style={{ 
-                          fontSize: '12px', 
-                          color: '#a1a1aa', 
-                          marginBottom: '8px',
-                          lineHeight: '1.4',
-                          overflow: 'hidden',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical'
-                        }}>
-                          {project.description}
-                        </p>
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => router.push(`/dashboard/projects/${project.id}/edit`)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 12px',
+                          backgroundColor: 'transparent',
+                          border: '1px solid #7c3aed',
+                          borderRadius: '4px',
+                          color: '#7c3aed',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Edit style={{ height: '12px', width: '12px' }} />
+                        Edit
+                      </button>
+                      
+                      {project.demoUrl && (
+                        <button
+                          onClick={() => window.open(project.demoUrl!, '_blank')}
+                          style={{
+                            padding: '6px 8px',
+                            backgroundColor: '#3b82f6',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          <ExternalLink style={{ height: '12px', width: '12px' }} />
+                        </button>
                       )}
 
-                      {/* Tech Stack */}
-                      <div style={{ marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                          {project.techStack.slice(0, 3).map((tech) => (
-                            <span
-                              key={tech}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '1px 4px',
-                                borderRadius: '3px',
-                                backgroundColor: 'rgba(124, 58, 237, 0.2)',
-                                color: '#7c3aed',
-                                fontSize: '10px',
-                                fontWeight: '500'
-                              }}
-                            >
-                              {tech}
-                            </span>
-                          ))}
-                          {project.techStack.length > 3 && (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              padding: '1px 4px',
-                              borderRadius: '3px',
-                              backgroundColor: 'rgba(124, 58, 237, 0.2)',
-                              color: '#7c3aed',
-                              fontSize: '10px',
-                              fontWeight: '500'
-                            }}>
-                              +{project.techStack.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      {project.repoUrl && (
+                        <button
+                          onClick={() => window.open(project.repoUrl!, '_blank')}
+                          style={{
+                            padding: '6px 8px',
+                            backgroundColor: '#1f2937',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          <Github style={{ height: '12px', width: '12px' }} />
+                        </button>
+                      )}
 
-                      {/* Stats and Actions */}
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between'
-                      }}>
-                        {/* Stats */}
-                        <div style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '8px', 
-                          fontSize: '11px',
-                          color: '#a1a1aa'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                            <MousePointer style={{ height: '8px', width: '8px' }} />
-                            {project.totalClicks}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                            <Calendar style={{ height: '8px', width: '8px' }} />
-                            {new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {project.demoUrl && (
-                            <a
-                              href={project.demoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '4px 6px',
-                                backgroundColor: 'rgba(124, 58, 237, 0.2)',
-                                color: '#7c3aed',
-                                textDecoration: 'none',
-                                border: '1px solid rgba(124, 58, 237, 0.3)',
-                                borderRadius: '3px',
-                                fontSize: '10px',
-                                fontWeight: '500'
-                              }}
-                            >
-                              <ExternalLink style={{ height: '10px', width: '10px', marginRight: '2px' }} />
-                              Demo
-                            </a>
-                          )}
-                          {project.repoUrl && (
-                            <a
-                              href={project.repoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '4px 6px',
-                                backgroundColor: '#374151',
-                                color: 'white',
-                                textDecoration: 'none',
-                                borderRadius: '3px',
-                                fontSize: '10px',
-                                fontWeight: '500'
-                              }}
-                            >
-                              <Github style={{ height: '10px', width: '10px', marginRight: '2px' }} />
-                              Code
-                            </a>
-                          )}
-                        </div>
-                      </div>
+                      <button
+                        onClick={() => handleDeleteProject(project.id, project.title)}
+                        style={{
+                          padding: '6px 8px',
+                          backgroundColor: 'transparent',
+                          border: '1px solid #ef4444',
+                          borderRadius: '4px',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <Trash2 style={{ height: '12px', width: '12px' }} />
+                      </button>
                     </div>
                   </div>
-                )
-              })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '300px',
+              color: '#a1a1aa',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📁</div>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#ffffff', margin: '0 0 8px 0' }}>
+                {searchQuery || selectedCategory || selectedStatus || showFeaturedOnly 
+                  ? 'No projects found' 
+                  : 'No projects yet'
+                }
+              </h3>
+              <p style={{ margin: '0 0 16px 0', maxWidth: '400px' }}>
+                {searchQuery || selectedCategory || selectedStatus || showFeaturedOnly 
+                  ? 'Try adjusting your filters or search terms.'
+                  : 'Create your first project to start building your portfolio.'
+                }
+              </p>
+              {!searchQuery && !selectedCategory && !selectedStatus && !showFeaturedOnly && (
+                <button
+                  onClick={() => router.push('/dashboard/projects/new')}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#7c3aed',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Plus style={{ height: '16px', width: '16px' }} />
+                  Create Your First Project
+                </button>
+              )}
             </div>
           )}
         </div>

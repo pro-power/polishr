@@ -3,7 +3,7 @@
 
 import { useSession, SessionProvider } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { 
   BarChart3, 
@@ -18,38 +18,114 @@ import {
   ExternalLink
 } from 'lucide-react'
 
+interface UserStatusResponse {
+  authenticated: boolean
+  user?: {
+    id: string
+    email: string
+    username: string
+    displayName: string
+    onboardingCompleted: boolean
+    projectCount: number
+    totalViews: number
+    [key: string]: any
+  } | null
+}
 
 function OnboardingCheck({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession()
+  const { data: session, status } = useSession() // FIXED: Removed update from destructuring
   const router = useRouter()
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true)
+  const [onboardingStatus, setOnboardingStatus] = useState<boolean | null>(null)
+  const hasChecked = useRef(false)
+  const isMounted = useRef(true)
 
   useEffect(() => {
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    // FIXED: Only run once per session establishment
+    if (hasChecked.current) {
+      return
+    }
+
+    // FIXED: Early return conditions
+    if (status === 'loading') {
+      return
+    }
+
+    if (status === 'unauthenticated') {
+      router.push('/auth/login')
+      return
+    }
+
+    if (!session?.user?.id) {
+      return
+    }
+
     const checkOnboardingStatus = async () => {
-      if (status === 'authenticated' && session?.user?.id) {
-        try {
-          const response = await fetch('/api/auth/status')
-          const result = await response.json()
+      try {
+        console.log('🔍 Checking onboarding status for user:', session.user.id)
+        hasChecked.current = true // FIXED: Mark as checked before API call
+        
+        const response = await fetch('/api/auth/status', {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        })
+        
+        if (!response.ok) {
+          throw new Error(`API call failed: ${response.status}`)
+        }
+
+        const result: UserStatusResponse = await response.json()
+        console.log('📊 Fresh user data from API:', result)
+        
+        if (!isMounted.current) {
+          return
+        }
+        
+        if (result.authenticated && result.user) {
+          const isOnboardingCompleted = result.user.onboardingCompleted
+          setOnboardingStatus(isOnboardingCompleted)
           
-          if (result.authenticated && result.user) {
-            // NEW: Check if onboarding is completed
-            if (!result.user.onboardingCompleted) {
-              router.push('/onboarding')
-              return
+          if (!isOnboardingCompleted) {
+            console.log('❌ Onboarding not completed, redirecting to onboarding')
+            router.push('/onboarding')
+            return
+          } else {
+            console.log('✅ Onboarding completed, user can access dashboard')
+            
+            // FIXED: Only log if session is out of sync, but DON'T update it
+            if (session.user && !session.user.onboardingCompleted) {
+              console.log('ℹ️ Session shows onboarding incomplete, but API shows complete. This is normal and will sync naturally.')
+              // REMOVED: No session update call that was causing the loop
             }
           }
-        } catch (error) {
-          console.error('Error checking onboarding status:', error)
+        }
+      } catch (error) {
+        console.error('Error checking onboarding status:', error)
+        // On error, assume they can access dashboard if authenticated
+        if (isMounted.current) {
+          setOnboardingStatus(true)
+        }
+      } finally {
+        if (isMounted.current) {
+          setIsCheckingOnboarding(false)
         }
       }
-      setIsCheckingOnboarding(false)
     }
 
     checkOnboardingStatus()
-  }, [status, session, router])
 
+  }, [status]) // FIXED: Only depend on status, not session
+
+  // FIXED: Use our own onboardingStatus state instead of session
   if (status === 'unauthenticated') {
-    router.push('/auth/login')
     return null
   }
 
@@ -68,7 +144,24 @@ function OnboardingCheck({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return children
+  // FIXED: Show dashboard if onboarding check passed
+  if (onboardingStatus === true || onboardingStatus === null) {
+    return <>{children}</>
+  }
+
+  // If onboarding not completed, show loading while redirecting
+  return (
+    <DashboardLayout>
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        height: '100%'
+      }}>
+        <div style={{ color: '#ffffff' }}>Redirecting to onboarding...</div>
+      </div>
+    </DashboardLayout>
+  )
 }
 
 function DashboardContent() {
@@ -102,324 +195,283 @@ function DashboardContent() {
     )
   }
 
-  if (!session) {
-    return null
+  const handleAddProjectHover = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.backgroundColor = '#2563eb'
   }
 
-  const statCards = [
-    {
-      name: 'Projects',
-      value: stats.totalProjects,
-      icon: FolderOpen,
-      color: '#7c3aed'
-    },
-    {
-      name: 'Views',
-      value: stats.totalViews,
-      icon: Eye,
-      color: '#10b981'
-    },
-    {
-      name: 'Clicks',
-      value: stats.totalClicks,
-      icon: MousePointer,
-      color: '#f59e0b'
-    },
-    {
-      name: 'Captures',
-      value: stats.totalEmailCaptures,
-      icon: Mail,
-      color: '#ef4444'
-    }
-  ]
+  const handleAddProjectLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.backgroundColor = '#3b82f6'
+  }
+
+  const handleViewPortfolioHover = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.backgroundColor = '#059669'
+  }
+
+  const handleViewPortfolioLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.backgroundColor = '#10b981'
+  }
 
   return (
     <DashboardLayout>
-      <div style={{ 
-        height: '100%', 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: '16px',
-        overflow: 'hidden'
-      }}>
-        {/* Welcome Section - Compact */}
-        <div style={{ 
-          backgroundColor: '#1a1a2e',
-          padding: '16px',
-          borderRadius: '8px',
-          border: '1px solid #7c3aed'
-        }}>
-          <h2 style={{ 
-            fontSize: '20px', 
+      <div style={{ padding: '24px' }}>
+        {/* Header */}
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ 
+            fontSize: '32px', 
             fontWeight: 'bold', 
             color: '#ffffff',
-            margin: '0 0 4px 0'
+            marginBottom: '8px'
           }}>
-            Welcome back, {session.user?.name || 'Developer'}! 👋
-          </h2>
-          <p style={{ color: '#a1a1aa', fontSize: '14px', margin: 0 }}>
-            Here's your portfolio overview
+            Welcome back, {session?.user?.name || session?.user?.displayName || 'Developer'}!
+          </h1>
+          <p style={{ color: '#a1a1aa', fontSize: '16px' }}>
+            Here's what's happening with your portfolio today.
           </p>
         </div>
 
-        {/* Stats Grid - Compact */}
+        {/* Stats Grid */}
         <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '12px'
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
         }}>
-          {statCards.map((stat) => {
-            const Icon = stat.icon
-            return (
-              <div
-                key={stat.name}
-                style={{
-                  backgroundColor: '#1a1a2e',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  border: '1px solid #7c3aed',
-                  textAlign: 'center'
-                }}
-              >
-                <Icon style={{ 
-                  height: '20px', 
-                  width: '20px', 
-                  color: stat.color,
-                  margin: '0 auto 8px auto',
-                  display: 'block'
-                }} />
-                <p style={{ 
-                  fontSize: '20px', 
-                  fontWeight: 'bold', 
-                  color: '#ffffff',
-                  margin: '0 0 4px 0'
-                }}>
-                  {stat.value.toLocaleString()}
-                </p>
-                <p style={{ 
-                  color: '#a1a1aa', 
-                  fontSize: '12px',
-                  margin: 0
-                }}>
-                  {stat.name}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Main Content Grid */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '1fr 300px',
-          gap: '16px',
-          flex: 1,
-          minHeight: 0 // Important for flex children
-        }}>
-          {/* Recent Activity */}
+          {/* Total Projects */}
           <div style={{
-            backgroundColor: '#1a1a2e',
-            padding: '16px',
-            borderRadius: '8px',
-            border: '1px solid #7c3aed',
-            display: 'flex',
-            flexDirection: 'column'
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
           }}>
-            <h3 style={{ 
-              fontSize: '16px', 
-              fontWeight: 'bold', 
-              color: '#7c3aed',
-              margin: '0 0 12px 0',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <TrendingUp style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-              Recent Activity
-            </h3>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                padding: '8px 0',
-                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{
+                backgroundColor: '#3b82f6',
+                padding: '8px',
+                borderRadius: '8px',
+                marginRight: '12px'
               }}>
-                <span style={{ color: '#ffffff', fontSize: '14px' }}>Profile views today</span>
-                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>12</span>
+                <FolderOpen style={{ width: '20px', height: '20px', color: '#ffffff' }} />
               </div>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                padding: '8px 0',
-                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
-              }}>
-                <span style={{ color: '#ffffff', fontSize: '14px' }}>Project clicks</span>
-                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>5</span>
-              </div>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                padding: '8px 0',
-                borderBottom: '1px solid rgba(124, 58, 237, 0.2)'
-              }}>
-                <span style={{ color: '#ffffff', fontSize: '14px' }}>Email captures</span>
-                <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>2</span>
-              </div>
-              <button
-                onClick={() => router.push('/dashboard/analytics')}
-                style={{
-                  marginTop: 'auto',
-                  padding: '8px 12px',
-                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                  color: '#7c3aed',
-                  border: '1px solid rgba(124, 58, 237, 0.3)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                View Detailed Analytics →
-              </button>
+              <h3 style={{ color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Projects</h3>
             </div>
+            <p style={{ color: '#ffffff', fontSize: '32px', fontWeight: 'bold', marginBottom: '4px' }}>
+              {stats.totalProjects}
+            </p>
+            <p style={{ color: '#a1a1aa', fontSize: '14px' }}>
+              Total showcased projects
+            </p>
           </div>
 
-          {/* Quick Actions */}
+          {/* Total Views */}
           <div style={{
-            backgroundColor: '#1a1a2e',
-            padding: '16px',
-            borderRadius: '8px',
-            border: '1px solid #7c3aed',
-            display: 'flex',
-            flexDirection: 'column'
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
           }}>
-            <h3 style={{ 
-              fontSize: '16px', 
-              fontWeight: 'bold', 
-              color: '#7c3aed',
-              margin: '0 0 12px 0',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-              Quick Actions
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                onClick={() => router.push('/dashboard/projects/new')}
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: '#7c3aed',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                <Plus style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                Add Project
-              </button>
-              <button
-                onClick={() => router.push('/dashboard/profile')}
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                  color: '#7c3aed',
-                  border: '1px solid rgba(124, 58, 237, 0.3)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                <Settings style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                Edit Profile
-              </button>
-              <button
-                onClick={() => router.push('/dashboard/analytics')}
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                  color: '#7c3aed',
-                  border: '1px solid rgba(124, 58, 237, 0.3)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                <BarChart3 style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                Analytics
-              </button>
-              <button
-                onClick={() => window.open(`/profile/${session.user?.username || 'user'}`, '_blank')}
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                  color: '#10b981',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                <ExternalLink style={{ height: '16px', width: '16px', marginRight: '8px' }} />
-                View Profile
-              </button>
-            </div>
-
-            {/* Progress Section */}
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(124, 58, 237, 0.3)' }}>
-              <h4 style={{ 
-                fontSize: '14px', 
-                fontWeight: 'bold', 
-                color: '#ffffff',
-                margin: '0 0 8px 0'
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{
+                backgroundColor: '#10b981',
+                padding: '8px',
+                borderRadius: '8px',
+                marginRight: '12px'
               }}>
-                Profile Progress
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: stats.totalProjects > 0 ? '#10b981' : '#6b7280',
-                    marginRight: '8px'
-                  }} />
-                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Add projects</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: '#6b7280',
-                    marginRight: '8px'
-                  }} />
-                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Customize profile</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: '#6b7280',
-                    marginRight: '8px'
-                  }} />
-                  <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Share profile</span>
-                </div>
+                <Eye style={{ width: '20px', height: '20px', color: '#ffffff' }} />
               </div>
+              <h3 style={{ color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Profile Views</h3>
+            </div>
+            <p style={{ color: '#ffffff', fontSize: '32px', fontWeight: 'bold', marginBottom: '4px' }}>
+              {stats.totalViews}
+            </p>
+            <p style={{ color: '#a1a1aa', fontSize: '14px' }}>
+              People who viewed your profile
+            </p>
+          </div>
+
+          {/* Total Clicks */}
+          <div style={{
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{
+                backgroundColor: '#f59e0b',
+                padding: '8px',
+                borderRadius: '8px',
+                marginRight: '12px'
+              }}>
+                <MousePointer style={{ width: '20px', height: '20px', color: '#ffffff' }} />
+              </div>
+              <h3 style={{ color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Project Clicks</h3>
+            </div>
+            <p style={{ color: '#ffffff', fontSize: '32px', fontWeight: 'bold', marginBottom: '4px' }}>
+              {stats.totalClicks}
+            </p>
+            <p style={{ color: '#a1a1aa', fontSize: '14px' }}>
+              Clicks on your project links
+            </p>
+          </div>
+
+          {/* Email Captures */}
+          <div style={{
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{
+                backgroundColor: '#8b5cf6',
+                padding: '8px',
+                borderRadius: '8px',
+                marginRight: '12px'
+              }}>
+                <Mail style={{ width: '20px', height: '20px', color: '#ffffff' }} />
+              </div>
+              <h3 style={{ color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Email Captures</h3>
+            </div>
+            <p style={{ color: '#ffffff', fontSize: '32px', fontWeight: 'bold', marginBottom: '4px' }}>
+              {stats.totalEmailCaptures}
+            </p>
+            <p style={{ color: '#a1a1aa', fontSize: '14px' }}>
+              Emails collected from projects
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
+        }}>
+          {/* Add New Project */}
+          <div style={{
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <Plus style={{ width: '24px', height: '24px', color: '#3b82f6', marginRight: '12px' }} />
+              <h3 style={{ color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>Add New Project</h3>
+            </div>
+            <p style={{ color: '#a1a1aa', fontSize: '14px', marginBottom: '16px' }}>
+              Showcase your latest work and attract more opportunities.
+            </p>
+            <button 
+              onClick={() => router.push('/dashboard/projects/new')}
+              onMouseEnter={handleAddProjectHover}
+              onMouseLeave={handleAddProjectLeave}
+              style={{
+                backgroundColor: '#3b82f6',
+                color: '#ffffff',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              Add Project
+            </button>
+          </div>
+
+          {/* View Portfolio */}
+          <div style={{
+            backgroundColor: '#1e1e2e',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid #313244'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <ExternalLink style={{ width: '24px', height: '24px', color: '#10b981', marginRight: '12px' }} />
+              <h3 style={{ color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>View Your Portfolio</h3>
+            </div>
+            <p style={{ color: '#a1a1aa', fontSize: '14px', marginBottom: '16px' }}>
+              See how your portfolio looks to visitors and potential employers.
+            </p>
+            <button 
+              onClick={() => window.open(`/${session?.user?.username || 'preview'}`, '_blank')}
+              onMouseEnter={handleViewPortfolioHover}
+              onMouseLeave={handleViewPortfolioLeave}
+              style={{
+                backgroundColor: '#10b981',
+                color: '#ffffff',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              View Portfolio
+            </button>
+          </div>
+        </div>
+
+        {/* Getting Started Guide */}
+        <div style={{
+          backgroundColor: '#1e1e2e',
+          padding: '24px',
+          borderRadius: '12px',
+          border: '1px solid #313244'
+        }}>
+          <h3 style={{ 
+            color: '#ffffff', 
+            fontSize: '20px', 
+            fontWeight: '600',
+            marginBottom: '16px'
+          }}>
+            Getting Started
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#10b981',
+                marginRight: '8px'
+              }} />
+              <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Complete onboarding</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: stats.totalProjects > 0 ? '#10b981' : '#6b7280',
+                marginRight: '8px'
+              }} />
+              <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Add projects</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#6b7280',
+                marginRight: '8px'
+              }} />
+              <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Customize profile</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#6b7280',
+                marginRight: '8px'
+              }} />
+              <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Share profile</span>
             </div>
           </div>
         </div>
@@ -431,9 +483,9 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <SessionProvider>
-    <OnboardingCheck>
-      <DashboardContent />
-    </OnboardingCheck>
-  </SessionProvider>
+      <OnboardingCheck>
+        <DashboardContent />
+      </OnboardingCheck>
+    </SessionProvider>
   )
 }

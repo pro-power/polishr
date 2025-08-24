@@ -10,6 +10,15 @@ declare module 'next-auth' {
       username?: string | null
       image?: string | null
       emailVerified?: Date | null
+      // FIXED: Add onboarding and portfolio fields
+      onboardingCompleted?: boolean
+      templateId?: string
+      themeId?: string
+      jobTitle?: string
+      displayName?: string
+      bio?: string
+      location?: string
+      lookingForWork?: boolean
     }
   }
 
@@ -20,6 +29,15 @@ declare module 'next-auth' {
     username?: string | null
     image?: string | null
     emailVerified?: Date | null
+    // FIXED: Add onboarding and portfolio fields
+    onboardingCompleted?: boolean
+    templateId?: string
+    themeId?: string
+    jobTitle?: string
+    displayName?: string
+    bio?: string
+    location?: string
+    lookingForWork?: boolean
   }
 }
 
@@ -28,5 +46,9 @@ declare module 'next-auth/jwt' {
     id: string
     username?: string | null
     emailVerified?: Date | null
+    // FIXED: Add onboarding and portfolio fields
+    onboardingCompleted?: boolean
+    templateId?: string
+    themeId?: string
   }
 }

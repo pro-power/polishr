@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 const TOTAL_STEPS = 6
 
 export default function OnboardingPage() {
-  const { data: session, status } = useSession()
+  const { data: session, status, update } = useSession()
   const router = useRouter()
   
   const [currentStep, setCurrentStep] = useState(1)
@@ -78,46 +78,58 @@ export default function OnboardingPage() {
   }
 
   const handleComplete = async () => {
-  setIsLoading(true)
-  
-  try {
-    console.log('🚀 Sending onboarding data:', onboardingData)
+    setIsLoading(true)
     
-    const response = await fetch('/api/onboarding/complete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(onboardingData),
-    })
-
-    const result = await response.json()
-    console.log('📤 API response:', result)
-
-    if (response.ok) {
-      // Show success message
-      toast.success('Portfolio created!', {
-        description: 'Your portfolio is now live and ready to share.',
-      })
+    try {
+      console.log('🚀 Sending onboarding data:', onboardingData)
       
-      // CHANGED: Redirect to dashboard instead of portfolio
-      console.log('✅ Success! Redirecting to dashboard...')
-      router.push('/dashboard')
-    } else {
-      console.error('❌ API error:', result)
-      toast.error('Failed to create portfolio', {
-        description: result.message || 'Please try again.',
+      const response = await fetch('/api/onboarding/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(onboardingData),
       })
+
+      const result = await response.json()
+      console.log('📤 API response:', result)
+
+      if (response.ok) {
+        // Show success message
+        toast.success('Portfolio created!', {
+          description: 'Your portfolio is now live and ready to share.',
+        })
+        
+        // FIXED: Update the session to reflect onboarding completion
+        console.log('🔄 Updating session with onboarding completion...')
+        await update({
+          ...session,
+          user: {
+            ...session?.user,
+            onboardingCompleted: true
+          }
+        })
+        
+        // Small delay to ensure session is updated
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+        console.log('✅ Success! Redirecting to dashboard...')
+        router.push('/dashboard')
+      } else {
+        console.error('❌ API error:', result)
+        toast.error('Failed to create portfolio', {
+          description: result.message || 'Please try again.',
+        })
+      }
+    } catch (error) {
+      console.error('💥 Request error:', error)
+      toast.error('Something went wrong', {
+        description: 'Please try again or contact support.',
+      })
+    } finally {
+      setIsLoading(false)
     }
-  } catch (error) {
-    console.error('💥 Request error:', error)
-    toast.error('Something went wrong', {
-      description: 'Please try again or contact support.',
-    })
-  } finally {
-    setIsLoading(false)
   }
-}
 
   if (status === 'loading') {
     return (

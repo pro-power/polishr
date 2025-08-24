@@ -21,8 +21,6 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [registrationComplete, setRegistrationComplete] = useState(false)
-  const [registeredEmail, setRegisteredEmail] = useState('')
   const [password, setPassword] = useState('')
 
   const router = useRouter()
@@ -59,9 +57,10 @@ export default function RegisterPage() {
       const result = await response.json()
 
       if (response.ok) {
-        // NEW: Check if user needs onboarding
-        if (result.requiresOnboarding) {
-          // Auto-sign them in first
+        // FIXED: Handle auto-login flow for seamless onboarding
+        if (result.autoLogin && result.requiresOnboarding) {
+          // Auto-sign them in for seamless experience
+          console.log('🔐 Auto-logging in user for onboarding...')
           const signInResult = await signIn('credentials', {
             email: data.email,
             password: data.password,
@@ -69,332 +68,291 @@ export default function RegisterPage() {
           })
 
           if (signInResult?.ok) {
-            // Redirect to onboarding instead of email verification
-            toast.success('Account created!', {
-              description: 'Let\'s set up your portfolio.',
+            toast.success('Welcome to DevStack Link!', {
+              description: 'Let\'s set up your portfolio in just a few steps.',
             })
-            router.push('/onboarding')
+            
+            // Small delay for session to be established
+            setTimeout(() => {
+              router.push('/onboarding')
+            }, 100)
           } else {
-            // Fallback to email verification if sign-in fails
-            setRegistrationComplete(true)
-            setRegisteredEmail(data.email)
-            toast.success('Account created!', {
-              description: 'Please check your email to verify your account.',
+            console.error('Auto-login failed:', signInResult?.error)
+            toast.error('Account created but login failed', {
+              description: 'Please try logging in manually.',
             })
+            router.push('/auth/login')
           }
         } else {
-          // Existing flow for email verification
-          setRegistrationComplete(true)
-          setRegisteredEmail(data.email)
-          
-          if (result.emailSent) {
-            toast.success('Account created!', {
-              description: 'Please check your email to verify your account.',
-            })
-          } else {
-            toast.warning('Account created but email not sent', {
-              description: 'You may need to request a verification email.',
-            })
-          }
+          // Fallback: redirect to login if auto-login is not enabled
+          toast.success('Account created successfully!', {
+            description: 'Please log in to continue.',
+          })
+          router.push('/auth/login')
         }
       } else {
-        toast.error(result.error || 'Failed to create account')
+        toast.error('Registration failed', {
+          description: result.message || 'Please try again.',
+        })
       }
     } catch (error) {
-      toast.error('An unexpected error occurred. Please try again.')
+      console.error('Registration error:', error)
+      toast.error('Something went wrong', {
+        description: 'Please try again or contact support.',
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Password strength indicator
+  // Password strength calculation
   const passwordStrength = password ? validatePasswordStrength(password) : { score: 0, feedback: [] }
-
-  const renderPasswordStrength = () => {
-    if (!password) return null
-
-    const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500']
-    const labels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong']
-
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <div className="flex-1 bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-300 ${colors[passwordStrength.score] || 'bg-gray-200'}`}
-              style={{ width: `${(passwordStrength.score / 4) * 100}%` }}
-            />
-          </div>
-          <span className={`text-xs font-medium ${passwordStrength.score >= 3 ? 'text-green-600' : 'text-orange-600'}`}>
-            {labels[passwordStrength.score] || 'Very Weak'}
-          </span>
-        </div>
-        {passwordStrength.feedback.length > 0 && (
-          <ul className="text-xs text-gray-600 space-y-1">
-            {passwordStrength.feedback.slice(0, 3).map((feedback, index) => (
-              <li key={index}>• {feedback}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    )
+  
+  const getPasswordStrengthColor = (score: number) => {
+    if (score <= 2) return '#ef4444' // red
+    if (score <= 4) return '#f59e0b' // yellow
+    return '#10b981' // green
   }
 
-  if (registrationComplete) {
-    return (
-      <div className="min-h-screen bg-black-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full">
-          <Card>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-bold text-gray-900">
-                DevStack Link
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center space-y-4">
-                <CheckCircle className="h-12 w-12 mx-auto text-green-600" />
-                <h2 className="text-xl font-semibold text-green-800">
-                  Registration Successful!
-                </h2>
-                <div className="space-y-2">
-                  <p className="text-gray-600">
-                    We've sent a verification email to:
-                  </p>
-                  <p className="font-medium text-gray-900">{registeredEmail}</p>
-                  <p className="text-sm text-gray-500">
-                    Please check your inbox and click the verification link to activate your account.
-                  </p>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-medium text-blue-900 mb-2">
-                    Next Steps:
-                  </h3>
-                  <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                    <li>Check your email inbox (and spam folder)</li>
-                    <li>Click the verification link in the email</li>
-                    <li>Return here to sign in to your account</li>
-                  </ol>
-                </div>
-
-                <div className="space-y-2">
-                  <Button asChild className="w-full">
-                    <Link href="/auth/verify-email">
-                      <Mail className="mr-2 h-4 w-4" />
-                      Didn't get the email?
-                    </Link>
-                  </Button>
-                  
-                  <Button asChild variant="ghost" className="w-full">
-                    <Link href="/auth/login">
-                      Already verified? Sign in
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
+  const getPasswordStrengthText = (score: number) => {
+    if (score <= 2) return 'Weak'
+    if (score <= 4) return 'Good'
+    return 'Strong'
   }
 
   return (
-    <div className="min-h-screen bg-black-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              DevStack Link
-            </CardTitle>
-            <p className="mt-2 text-sm text-gray-600">
-              Create your developer portfolio
-            </p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  autoComplete="email"
-                  disabled={isLoading}
-                  {...register('email')}
-                />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* Username Field */}
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="johndoe"
-                  autoComplete="username"
-                  disabled={isLoading}
-                  {...register('username')}
-                />
-                {errors.username && (
-                  <p className="text-sm text-destructive">{errors.username.message}</p>
-                )}
-                <p className="text-xs text-gray-500">
-                  This will be your profile URL: devstack.link/username
-                </p>
-              </div>
-
-              {/* Display Name Field */}
-              <div className="space-y-2">
-                <Label htmlFor="displayName">Display Name</Label>
-                <Input
-                  id="displayName"
-                  type="text"
-                  placeholder="John Doe"
-                  autoComplete="name"
-                  disabled={isLoading}
-                  {...register('displayName')}
-                />
-                {errors.displayName && (
-                  <p className="text-sm text-destructive">{errors.displayName.message}</p>
-                )}
-              </div>
-
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a strong password"
-                    autoComplete="new-password"
-                    disabled={isLoading}
-                    {...register('password')}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
-                {renderPasswordStrength()}
-              </div>
-
-              {/* Confirm Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
-                    autoComplete="new-password"
-                    disabled={isLoading}
-                    {...register('confirmPassword')}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    disabled={isLoading}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                {errors.confirmPassword && (
-                  <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
-                )}
-              </div>
-
-              {/* Terms Agreement */}
-              <div className="flex items-center space-x-2">
-                <Controller
-                  name="agreeToTerms"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      id="agreeToTerms"
-                      checked={field.value || false}
-                      onCheckedChange={field.onChange}
-                      disabled={isLoading}
-                    />
-                  )}
-                />
-                <Label htmlFor="agreeToTerms" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  I agree to the{' '}
-                  <Link href="/terms" className="text-primary hover:underline">
-                    Terms of Service
-                  </Link>{' '}
-                  and{' '}
-                  <Link href="/privacy" className="text-primary hover:underline">
-                    Privacy Policy
-                  </Link>
-                </Label>
-              </div>
-              {errors.agreeToTerms && (
-                <p className="text-sm text-destructive">{errors.agreeToTerms.message}</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-900 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center text-white">
+            Create your account
+          </CardTitle>
+          <p className="text-gray-400 text-center">
+            Join DevStack Link and showcase your projects
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Display Name */}
+            <div className="space-y-2">
+              <Label htmlFor="displayName" className="text-gray-200">
+                Full Name
+              </Label>
+              <Input
+                id="displayName"
+                placeholder="John Doe"
+                type="text"
+                autoComplete="name"
+                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500"
+                {...register('displayName')}
+              />
+              {errors.displayName && (
+                <p className="text-red-400 text-sm">{errors.displayName.message}</p>
               )}
+            </div>
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading || passwordStrength.score < 2}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Account...
-                  </>
-                ) : (
-                  'Create Account'
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                Already have an account?{' '}
-                <Link
-                  href="/auth/login"
-                  className="text-primary hover:underline font-medium"
-                >
-                  Sign in
-                </Link>
+            {/* Username */}
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-gray-200">
+                Username
+              </Label>
+              <Input
+                id="username"
+                placeholder="johndoe"
+                type="text"
+                autoComplete="username"
+                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500"
+                {...register('username')}
+              />
+              {errors.username && (
+                <p className="text-red-400 text-sm">{errors.username.message}</p>
+              )}
+              <p className="text-gray-500 text-xs">
+                Your portfolio will be available at devstack.link/yourusername
               </p>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Additional Information */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            By creating an account, you'll be able to showcase your projects and build a professional developer portfolio.
-          </p>
-        </div>
-      </div>
+            {/* Email */}
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-gray-200">
+                Email
+              </Label>
+              <Input
+                id="email"
+                placeholder="john@example.com"
+                type="email"
+                autoComplete="email"
+                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500"
+                {...register('email')}
+              />
+              {errors.email && (
+                <p className="text-red-400 text-sm">{errors.email.message}</p>
+              )}
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-gray-200">
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500 pr-10"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-red-400 text-sm">{errors.password.message}</p>
+              )}
+
+              {/* Password Strength Indicator */}
+              {password && (
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-1 bg-gray-600 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.max(10, (passwordStrength.score / 6) * 100)}%`,
+                          backgroundColor: getPasswordStrengthColor(passwordStrength.score),
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="text-sm font-medium"
+                      style={{ color: getPasswordStrengthColor(passwordStrength.score) }}
+                    >
+                      {getPasswordStrengthText(passwordStrength.score)}
+                    </span>
+                  </div>
+                  {passwordStrength.feedback.length > 0 && (
+                    <ul className="text-xs text-gray-400 space-y-1">
+                      {passwordStrength.feedback.slice(0, 3).map((feedback, index) => (
+                        <li key={index} className="flex items-center space-x-1">
+                          <span className="w-1 h-1 bg-gray-400 rounded-full" />
+                          <span>{feedback}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-gray-200">
+                Confirm Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500 pr-10"
+                  {...register('confirmPassword')}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-red-400 text-sm">{errors.confirmPassword.message}</p>
+              )}
+            </div>
+
+            {/* Terms and Conditions - FIXED: Use correct field name */}
+            <div className="flex items-center space-x-2">
+              <Controller
+                name="agreeToTerms"
+                control={control}
+                render={({ field: { value, onChange } }) => (
+                  <Checkbox
+                    id="terms"
+                    checked={value || false}
+                    onCheckedChange={(checked) => onChange(checked === true)}
+                    className="border-gray-600 data-[state=checked]:bg-indigo-600"
+                  />
+                )}
+              />
+              <Label
+                htmlFor="terms"
+                className="text-sm text-gray-300 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                I agree to the{' '}
+                <Link href="/terms" className="text-indigo-400 hover:text-indigo-300 underline">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link href="/privacy" className="text-indigo-400 hover:text-indigo-300 underline">
+                  Privacy Policy
+                </Link>
+              </Label>
+            </div>
+            {/* FIXED: Use correct field name for error display */}
+            {errors.agreeToTerms && (
+              <p className="text-red-400 text-sm">{errors.agreeToTerms.message}</p>
+            )}
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                'Create account'
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-600" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-gray-800 px-2 text-gray-400">Already have an account?</span>
+              </div>
+            </div>
+            <div className="mt-6">
+              <Link
+                href="/auth/login"
+                className="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Sign in to existing account
+              </Link>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

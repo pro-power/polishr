@@ -33,90 +33,136 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const body = await request.json()
-  const validatedData = onboardingSchema.parse(body)
+  console.log('📥 Received onboarding data:', body)
 
   try {
-    // Update user with onboarding data
-    const updatedUser = await db.user.update({
-      where: { id: session.user.id },
-      data: {
-        // Basic info
-        displayName: validatedData.basicInfo.displayName,
-        jobTitle: validatedData.basicInfo.jobTitle,
-        bio: validatedData.basicInfo.bio || null,
-        location: validatedData.basicInfo.location || null,
-        
-        // Social links (convert empty strings to null)
-        website: validatedData.socialLinks.website || null,
-        githubUrl: validatedData.socialLinks.githubUrl || null,
-        linkedinUrl: validatedData.socialLinks.linkedinUrl || null,
-        twitterUrl: validatedData.socialLinks.twitterUrl || null,
-        resumeUrl: validatedData.socialLinks.resumeUrl || null,
-        
-        // Template/theme selection
-        templateId: validatedData.selectedTemplate,
-        themeId: validatedData.selectedTheme,
-        
-        // Status
-        lookingForWork: validatedData.lookingForWork,
-        onboardingCompleted: true,
-        isPublic: true, // Make profile public after onboarding
-      },
+    const validatedData = onboardingSchema.parse(body)
+    console.log('✅ Validated onboarding data:', validatedData)
+
+    // Start database transaction for data consistency
+    const result = await db.$transaction(async (prisma) => {
+      // Update user with onboarding data
+      const updatedUser = await prisma.user.update({
+        where: { id: session.user.id },
+        data: {
+          // Basic info
+          displayName: validatedData.basicInfo.displayName,
+          jobTitle: validatedData.basicInfo.jobTitle,
+          bio: validatedData.basicInfo.bio || null,
+          location: validatedData.basicInfo.location || null,
+          
+          // Social links (convert empty strings to null)
+          website: validatedData.socialLinks.website || null,
+          githubUrl: validatedData.socialLinks.githubUrl || null,
+          linkedinUrl: validatedData.socialLinks.linkedinUrl || null,
+          twitterUrl: validatedData.socialLinks.twitterUrl || null,
+          resumeUrl: validatedData.socialLinks.resumeUrl || null,
+          
+          // Template/theme selection
+          templateId: validatedData.selectedTemplate,
+          themeId: validatedData.selectedTheme,
+          
+          // Status updates
+          lookingForWork: validatedData.lookingForWork,
+          onboardingCompleted: true, // CRITICAL: Mark onboarding as completed
+          isPublic: true, // Make profile public after onboarding
+          
+          // Update timestamp
+          updatedAt: new Date(),
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          onboardingCompleted: true,
+          templateId: true,
+          themeId: true,
+        }
+      })
+
+      // Create/update portfolio configuration
+      await prisma.userPortfolioConfig.upsert({
+        where: { userId: session.user.id },
+        update: {
+          templateId: validatedData.selectedTemplate,
+          themeId: validatedData.selectedTheme,
+          sectionOrder: ['header', 'about', 'projects', 'skills', 'experience', 'contact'],
+          sectionVisibility: {
+            header: true,
+            about: true,
+            projects: true,
+            skills: true,
+            experience: true,
+            contact: true,
+          },
+          customizations: {},
+          updatedAt: new Date(),
+        },
+        create: {
+          userId: session.user.id,
+          templateId: validatedData.selectedTemplate,
+          themeId: validatedData.selectedTheme,
+          sectionOrder: ['header', 'about', 'projects', 'skills', 'experience', 'contact'],
+          sectionVisibility: {
+            header: true,
+            about: true,
+            projects: true,
+            skills: true,
+            experience: true,
+            contact: true,
+          },
+          customizations: {},
+        },
+      })
+
+      // Track template selection for analytics
+      await prisma.templateAnalytics.create({
+        data: {
+          templateId: validatedData.selectedTemplate,
+          themeId: validatedData.selectedTheme,
+          userId: session.user.id,
+          action: 'selected',
+        },
+      })
+
+      return updatedUser
     })
 
-    // Create portfolio configuration
-    await db.userPortfolioConfig.upsert({
-      where: { userId: session.user.id },
-      update: {
-        templateId: validatedData.selectedTemplate,
-        themeId: validatedData.selectedTheme,
-        sectionOrder: ['header', 'about', 'projects', 'skills', 'experience', 'contact'],
-        sectionVisibility: {
-          header: true,
-          about: true,
-          projects: true,
-          skills: true,
-          experience: true,
-          contact: true,
-        },
-        customizations: {},
-      },
-      create: {
-        userId: session.user.id,
-        templateId: validatedData.selectedTemplate,
-        themeId: validatedData.selectedTheme,
-        sectionOrder: ['header', 'about', 'projects', 'skills', 'experience', 'contact'],
-        sectionVisibility: {
-          header: true,
-          about: true,
-          projects: true,
-          skills: true,
-          experience: true,
-          contact: true,
-        },
-        customizations: {},
-      },
-    })
-
-    // Track template selection for analytics
-    await db.templateAnalytics.create({
-      data: {
-        templateId: validatedData.selectedTemplate,
-        themeId: validatedData.selectedTheme,
-        userId: session.user.id,
-        action: 'selected',
-      },
-    })
+    console.log('✅ Database transaction completed:', result)
 
     return createResponse({
       success: true,
       message: 'Onboarding completed successfully',
-      username: updatedUser.username,
-      portfolioUrl: `/${updatedUser.username}`,
+      user: {
+        id: result.id,
+        username: result.username,
+        displayName: result.displayName,
+        onboardingCompleted: result.onboardingCompleted,
+        templateId: result.templateId,
+        themeId: result.themeId,
+      },
+      portfolioUrl: `/${result.username}`,
     })
 
   } catch (error) {
-    console.error('Onboarding completion error:', error)
+    console.error('💥 Onboarding completion error:', error)
+    
+    // Handle validation errors
+    if (error instanceof z.ZodError) {
+      return createErrorResponse(
+        'Invalid onboarding data',
+        400,
+        { validationErrors: error.errors }
+      )
+    }
+
+    // Handle database errors
+    if (error instanceof Error) {
+      if (error.message.includes('Unique constraint')) {
+        return createErrorResponse('Username or email already taken', 409)
+      }
+    }
+
     return createErrorResponse('Failed to complete onboarding', 500)
   }
 })

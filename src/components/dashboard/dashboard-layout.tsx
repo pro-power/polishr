@@ -202,7 +202,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               
               {/* View Profile Link */}
               <Link
-                href={`/profile/${session.user.username || 'user'}`}
+                href={`/${session.user.username || 'user'}`}
                 target="_blank"
                 style={{
                   display: 'flex',

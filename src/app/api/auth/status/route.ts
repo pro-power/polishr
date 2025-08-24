@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get full user data from database
+    // FIXED: Always fetch fresh user data from database to avoid session cache issues
     const user = await db.user.findUnique({
       where: { id: session.user.id },
       select: {
@@ -35,6 +35,14 @@ export async function GET(request: NextRequest) {
         planType: true,
         createdAt: true,
         lastLoginAt: true,
+        // FIXED: Include all onboarding-related fields
+        onboardingCompleted: true,
+        templateId: true,
+        themeId: true,
+        jobTitle: true,
+        location: true,
+        lookingForWork: true,
+        resumeUrl: true,
         _count: {
           select: {
             projects: true,
@@ -51,11 +59,17 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // FIXED: Return comprehensive user data including onboarding status
     return NextResponse.json({
       authenticated: true,
       user: {
         ...user,
         emailVerified: !!user.emailVerified,
+        // Add computed fields for easier access
+        projectCount: user._count.projects,
+        totalViews: user._count.profileViews,
+        hasCompletedProfile: !!(user.bio && user.jobTitle),
+        profileCompleteness: calculateProfileCompleteness(user),
       },
     })
 
@@ -67,4 +81,19 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// Helper function to calculate profile completeness percentage
+function calculateProfileCompleteness(user: any): number {
+  const fields = [
+    user.displayName,
+    user.jobTitle,
+    user.bio,
+    user.location,
+    user.avatarUrl,
+    user.website || user.githubUrl || user.linkedinUrl, // At least one social link
+  ]
+  
+  const completedFields = fields.filter(field => field && field.length > 0).length
+  return Math.round((completedFields / fields.length) * 100)
 }

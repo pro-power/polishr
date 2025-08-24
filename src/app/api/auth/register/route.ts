@@ -4,24 +4,14 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { registerSchema, RESERVED_USERNAMES } from '@/lib/validations/auth'
 import { withErrorHandling, createResponse, createErrorResponse } from '@/lib/api-utils'
-import { generateEmailToken, sendVerificationEmail, checkEmailRateLimit } from '@/lib/email'
 
-// POST /api/auth/register - Register new user
+// POST /api/auth/register - Register new user with auto-login flow
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const body = await request.json()
 
   try {
     // Validate input
     const { email, password, username, displayName } = registerSchema.parse(body)
-
-    // Check rate limiting for email
-    const rateCheck = checkEmailRateLimit(email)
-    if (!rateCheck.allowed) {
-      return createErrorResponse(
-        'Too many registration attempts. Please try again later.',
-        429
-      )
-    }
 
     // Normalize email and username
     const normalizedEmail = email.toLowerCase()
@@ -63,40 +53,42 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const saltRounds = 12
     const passwordHash = await bcrypt.hash(password, saltRounds)
 
-    // NEW: For onboarding flow, we skip email verification
-    // Create user with portfolio fields and mark for onboarding
+    // FIXED: Create user with auto-verification for smooth onboarding flow
     const user = await db.user.create({
       data: {
         email: normalizedEmail,
         passwordHash,
         username: normalizedUsername,
         displayName,
-        // NEW: Skip email verification for onboarding flow
-        emailVerified: new Date(), // Auto-verify for onboarding flow
-        emailVerificationToken: null, // No verification needed
-        // NEW: Portfolio system defaults
+        // Auto-verify for seamless onboarding experience
+        emailVerified: new Date(),
+        emailVerificationToken: null,
+        // Portfolio system defaults
         onboardingCompleted: false,
         templateId: 'minimal',
         themeId: 'ocean',
         isPublic: false, // Keep private until onboarding is complete
         lookingForWork: true,
+        // Set default theme color
+        themeColor: 'blue',
+        planType: 'FREE',
       },
     })
 
-    // NEW: Return success with onboarding flag (no email sending)
+    // FIXED: Return success with auto-login flag for seamless flow
     return createResponse({
       message: 'Account created successfully! Let\'s set up your portfolio.',
       userId: user.id,
-      emailSent: false, // No email sent in onboarding flow
-      // NEW: Always require onboarding for new users
+      emailSent: false, // No email verification needed for auto-login flow
       requiresOnboarding: true,
+      autoLogin: true, // Flag for frontend to auto-login
       user: {
         id: user.id,
         email: user.email,
         username: user.username,
         displayName: user.displayName,
-        emailVerified: !!user.emailVerified, // true since we auto-verified
-        onboardingCompleted: user.onboardingCompleted, // false
+        emailVerified: true, // Auto-verified
+        onboardingCompleted: false,
       },
     })
 
